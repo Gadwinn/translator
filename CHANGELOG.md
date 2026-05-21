@@ -12,6 +12,46 @@ Each breaking change is explicitly listed in its section.
 
 ### Added
 
+#### Phase B — Runtime layer
+
+- `G\Translator\Runtime\Placeholder\DefaultPlaceholderResolver`: canonical
+  implementation of `PlaceholderResolverInterface`. Supports the four
+  documented syntaxes (sprintf positional, `%name%`, `{name}`) with
+  deterministic family detection (priority: sprintf > %name% > {name} >
+  none). Escape sequences (`%%`, `{{`, `}}`) are collapsed AFTER
+  substitution to prevent user-supplied values from re-entering the
+  pass. Values must be `scalar` or `Stringable`; anything else throws
+  `InvalidPlaceholderValueException`.
+- `G\Translator\Runtime\Plural\CldrPluralResolver`: CLDR-backed
+  `PluralResolverInterface` covering ~50 locale aliases grouped in 15
+  rule families (Germanic, French-style, East-Slavic, Polish, Czech /
+  Slovak, Romanian, Arabic, Hebrew, Slovenian, Latvian, Lithuanian,
+  Irish, Welsh, Maltese, no-plural). Rules are embedded in PHP, not
+  loaded from JSON at runtime.
+- `G\Translator\Runtime\Plural\GettextExpressionPluralResolver`:
+  evaluates Gettext `Plural-Forms` expressions against a registered
+  per-locale AST. **No `eval()`, no `create_function()`** — a
+  hand-rolled tokenizer + recursive-descent parser is the only
+  evaluation path. The form-index → CLDR category mapping is
+  documented on the class docblock.
+- `G\Translator\Runtime\Plural\Gettext\*`: the AST hierarchy
+  (`ExpressionNode` base, `IntegerLiteral`, `CountVariable`,
+  `BinaryOperation`, `UnaryOperation`, `TernaryOperation`) plus the
+  `BinaryOperator` / `UnaryOperator` enums and the `ExpressionParser`
+  itself. Short-circuit evaluation for `&&` / `||`; division /
+  modulo by zero raise `PluralResolutionException`.
+- `G\Translator\Runtime\Plural\CompositePluralResolver`: delegates to
+  the Gettext resolver when an expression is registered for the
+  locale, falls back to CLDR otherwise. Stateless wrapper.
+- `G\Translator\Runtime\Translator`: canonical
+  `TranslatorInterface` implementation. Orchestrator only — no
+  translation logic beyond the locale-chain walk and resolver
+  delegation. `injectCountIfNeeded()` private helper auto-injects the
+  count into named placeholders (`{count}`, `%count%`) for `plural()`,
+  never for positional ones. Locale override is applied via a
+  `clone` of the configured fallback so the chain and auto-parent
+  setting are preserved.
+
 #### Phase A — Foundation layer
 
 - `G\Translator\Bag\TranslationEntry`: canonical immutable implementation
@@ -51,8 +91,16 @@ Each breaking change is explicitly listed in its section.
 
 ### Tested
 
-- 71 PHPUnit tests covering every Phase A class, including dedicated
-  tests that document Phase A's design decisions (PHPDoc-as-validation,
-  garbage-in-garbage-out semantics for runtime-unchecked invariants,
-  composite-key disambiguation under `THROW_ON_CONFLICT`).
-- PHPStan level `max` analysis is clean (zero errors, zero baseline).
+- 221 PHPUnit tests / 284 assertions covering all Phase A and Phase B
+  classes. Highlights:
+  - Phase A: design-documentation tests for the
+    PHPDoc-as-validation trade-off, garbage-in-garbage-out semantics,
+    and composite-key disambiguation under `THROW_ON_CONFLICT`.
+  - Phase B: ~60 CLDR test cases across every supported locale,
+    canonical Gettext expressions for English / French / Russian /
+    Polish / Arabic / Japanese, a dedicated security suite asserting
+    that `phpinfo()`, `system(...)`, `$n`, assignments, string
+    literals, backticks, array syntax, and other PHP-flavoured
+    inputs are rejected by `ExpressionParser`.
+- PHPStan level `max` analysis is clean (zero errors, zero baseline)
+  across both phases.
