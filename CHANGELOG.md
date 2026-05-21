@@ -12,6 +12,28 @@ Each breaking change is explicitly listed in its section.
 
 ### Added
 
+#### Phase E — Engine (stacking + merge strategies)
+
+- `G\Translator\Engine\Strategy\Handler\ThrowOnConflictHandler`:
+  raises `MergeException` on every collision; the default behavior
+  every other strategy is an opt-in alternative to.
+- `G\Translator\Engine\Strategy\Handler\ReplaceHandler`: returns
+  `$incoming` (last-write-wins).
+- `G\Translator\Engine\Strategy\Handler\KeepExistingHandler`:
+  returns `$existing` (first-write-wins).
+- `G\Translator\Engine\Strategy\MergeStrategyResolver`: canonical
+  resolver that pre-registers the three built-in handlers eagerly;
+  `register()` replaces any registered handler for the same
+  strategy so custom implementations can swap built-ins without
+  subclassing.
+- `G\Translator\Engine\StackEngine`: canonical orchestrator. Sorts
+  layers by `priority` ascending via `array_multisort` with the
+  original index as tiebreaker (stable sort; PHP's `usort` is
+  intentionally not). Folds bags through the resolver's handler so
+  custom merge handlers plug in without engine changes.
+  Empty-engine short-circuit handles the `range(0, -1)` PHP
+  pitfall safely.
+
 #### Phase D — Parsers and serializers
 
 - `G\Translator\Io\Parser\PoParser` / `G\Translator\Io\Serializer\PoSerializer`:
