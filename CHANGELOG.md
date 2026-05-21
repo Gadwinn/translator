@@ -12,6 +12,47 @@ Each breaking change is explicitly listed in its section.
 
 ### Added
 
+#### Phase F — HTTP transport + AI providers
+
+- `G\Translator\Http\CurlHttpClient`: default
+  `HttpClientInterface` implementation. `send()` via `curl_exec`,
+  `sendMany()` via genuine `curl_multi_*` parallelism. Security
+  defaults: HTTPS-only (opt-out via constructor `allowHttp` flag),
+  full TLS verification, no redirect following. Response headers
+  lowercased. Compatible with PHP 8.5 — does not call the
+  deprecated `curl_close()` since curl handles are objects since
+  PHP 8.0.
+- `G\Translator\Exception\Bridge\HttpTransportException`: concrete
+  transport-layer error (connection refused, DNS failure, TLS
+  handshake, non-HTTPS in HTTPS-only mode).
+- `G\Translator\Exception\Bridge\HttpTimeoutException`: `final`
+  subclass mapped from `CURLE_OPERATION_TIMEDOUT` so retry/backoff
+  code can match the timeout case specifically.
+- `G\Translator\Bridge\Ai\Provider\ClaudeProvider`: Anthropic
+  Messages API; model per `TranslationQuality`
+  (`claude-haiku-4-5-20251001` / `claude-sonnet-4-6` /
+  `claude-opus-4-7`); plural support via a strict JSON-envelope
+  system prompt. HTTP 401/403 → `AiAuthenticationException`,
+  429 → `AiRateLimitException`, others → `AiProviderException`.
+  Plural results missing the mandatory `other` category are
+  rejected. Fail-fast batch policy.
+- `G\Translator\Bridge\Ai\Provider\OpenAiProvider`: Chat
+  Completions API with `response_format: json_object`. Same
+  quality → model split (`gpt-4o-mini` / `gpt-4o`), same plural
+  handling, same exception mapping, same fail-fast batch policy.
+- `G\Translator\Bridge\Ai\Provider\DeeplProvider`: text-only
+  translation. **Ignores `sourcePluralText`** (DeepL has no plural
+  primitive) and always returns an empty
+  `translatedPluralForms`. Endpoint auto-detected: free keys ending
+  in `:fx` route to `api-free.deepl.com`, others to `api.deepl.com`.
+  Locales upper-cased to DeepL convention (`pt_BR` → `PT-BR`).
+- `G\Translator\Bridge\Ai\BagTranslator`: end-to-end orchestrator.
+  Builds one `TranslationRequest` per source entry, batches via
+  `translateBatch()`, hydrates a fresh target bag. Source-text
+  resolution: `content !== '' ? content : id`. Source bag never
+  mutated. Metadata propagated except `po-header` (the source's
+  PO header does not belong on the translated bag).
+
 #### Phase E — Engine (stacking + merge strategies)
 
 - `G\Translator\Engine\Strategy\Handler\ThrowOnConflictHandler`:
