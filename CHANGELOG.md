@@ -12,6 +12,59 @@ Each breaking change is explicitly listed in its section.
 
 ### Added
 
+#### Phase D — Parsers and serializers
+
+- `G\Translator\Io\Parser\PoParser` / `G\Translator\Io\Serializer\PoSerializer`:
+  full GNU Gettext PO support — header parsing (with `Plural-Forms`
+  expression and `nplurals` resolution), `msgctxt` disambiguation,
+  multi-line strings (`""` opener + continuation lines), the five
+  PO escape sequences (`\\`, `\"`, `\n`, `\t`, `\r`), all four
+  comment families (`#`, `#.`, `#:`, `#,`), and plural variants
+  via a fixed nplurals → CLDR-category mapping that mirrors
+  `GettextExpressionPluralResolver` (duplication is intentional —
+  the DAG forbids `Io → Runtime` dependencies; both files
+  cross-reference each other in their docblocks). Metadata schema
+  documented at the top of `PoParser`: `comments`, `extracted`,
+  `references`, `flags`, `msgid_plural`, `po-header`.
+- `G\Translator\Io\Parser\JsonParser` /
+  `G\Translator\Io\Serializer\JsonSerializer`: flat-or-nested
+  decode (nested objects flattened to dotted keys), flat
+  pretty-printed output (`JSON_PRETTY_PRINT`, `JSON_UNESCAPED_UNICODE`,
+  `JSON_UNESCAPED_SLASHES`). No plurals / context / metadata in
+  the JSON shape.
+- `G\Translator\Io\Parser\AngularJsonParser` /
+  `G\Translator\Io\Serializer\AngularJsonSerializer`: same parse
+  logic as JSON, but the serializer un-flattens dotted ids back
+  into nested objects (ngx-translate convention). Conflicts
+  between a string leaf and a nested object at the same path raise
+  `SerializerException`.
+- `G\Translator\Io\Parser\PhpParser` /
+  `G\Translator\Io\Serializer\PhpSerializer`: temp-file `require`
+  with unique `tempnam()` slots (no OPcache contamination between
+  parses), `var_export`-based output prefixed with
+  `declare(strict_types=1)`. Same flatten convention as
+  `JsonParser`.
+- `G\Translator\Io\Parser\YamlParser` /
+  `G\Translator\Io\Serializer\YamlSerializer`: hand-rolled
+  recursive-descent parser for the strict translation subset
+  (nested maps + scalar strings only). DELIBERATELY rejects
+  multi-line scalars (`|`, `>`), anchors (`&`, `*`), tags (`!!`),
+  flow style (`{key: value}`, `[a, b]`), and list items (`-`),
+  with explicit `ParserException` messages naming the rejected
+  feature. The serializer always double-quotes values to bypass
+  YAML's implicit typing (`yes`, `true`, `42`).
+- `G\Translator\Io\Parser\XliffParser` /
+  `G\Translator\Io\Serializer\XliffSerializer`: dual-version
+  support (XLIFF 1.2 and 2.0). Parser detects version from the
+  root `version` attribute and dispatches to the matching walker;
+  serializer emits the version stored in
+  `metadata['xliff-version']` (defaults to 1.2 when absent).
+  Notes attached to units survive round-trip through
+  `metadata['notes']`.
+- `G\Translator\Io\Detector\FormatDetector::registerBuiltins()`:
+  fully wired — every built-in parser and serializer is
+  registered eagerly so `new FormatDetector()` is plug-and-play.
+
 #### Phase C — I/O sources and format detection
 
 - `G\Translator\Io\Source\FileSource`: `final readonly`
@@ -119,8 +172,8 @@ Each breaking change is explicitly listed in its section.
 
 ### Tested
 
-- 264 PHPUnit tests / 340 assertions covering all Phase A, Phase B,
-  and Phase C classes. Highlights:
+- 335 PHPUnit tests / 583 assertions covering all Phase A → D
+  classes. Highlights:
   - Phase A: design-documentation tests for the
     PHPDoc-as-validation trade-off, garbage-in-garbage-out semantics,
     and composite-key disambiguation under `THROW_ON_CONFLICT`.

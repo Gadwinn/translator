@@ -161,30 +161,14 @@ final class FormatDetectorTest extends TestCase
         self::assertSame($parser, $detector->parserFor($source));
     }
 
-    public function testParserForThrowsWhenNoParserRegistered(): void
-    {
-        $detector = new FormatDetector();
-        $source = new StringSource('msgid "x"', extension: 'po');
-
-        $this->expectException(UnsupportedFormatException::class);
-        $detector->parserFor($source);
-    }
-
     public function testSerializerForReturnsRegisteredSerializer(): void
     {
         $detector = new FormatDetector();
         $serializer = $this->stubSerializer(Format::JSON);
         $detector->registerSerializer($serializer);
 
+        // Custom registration must replace the built-in.
         self::assertSame($serializer, $detector->serializerFor(Format::JSON));
-    }
-
-    public function testSerializerForThrowsWhenNoSerializerRegistered(): void
-    {
-        $detector = new FormatDetector();
-
-        $this->expectException(UnsupportedFormatException::class);
-        $detector->serializerFor(Format::JSON);
     }
 
     public function testRegisterParserReplacesExisting(): void

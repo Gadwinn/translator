@@ -2,6 +2,7 @@
 <phpunit
     displayDetailsOnTestsThatTriggerWarnings="true"
     displayDetailsOnPhpunitDeprecations="true"
+    displayDetailsOnPhpunitNotices="true"
     displayDetailsOnTestsThatTriggerNotices="true"
     colors="true"
 >

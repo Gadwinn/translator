@@ -6,8 +6,20 @@ namespace G\Translator\Io\Detector;
 
 use G\Translator\Enum\Format;
 use G\Translator\Exception\Io\UnsupportedFormatException;
+use G\Translator\Io\Parser\AngularJsonParser;
+use G\Translator\Io\Parser\JsonParser;
 use G\Translator\Io\Parser\ParserInterface;
+use G\Translator\Io\Parser\PhpParser;
+use G\Translator\Io\Parser\PoParser;
+use G\Translator\Io\Parser\XliffParser;
+use G\Translator\Io\Parser\YamlParser;
+use G\Translator\Io\Serializer\AngularJsonSerializer;
+use G\Translator\Io\Serializer\JsonSerializer;
+use G\Translator\Io\Serializer\PhpSerializer;
+use G\Translator\Io\Serializer\PoSerializer;
 use G\Translator\Io\Serializer\SerializerInterface;
+use G\Translator\Io\Serializer\XliffSerializer;
+use G\Translator\Io\Serializer\YamlSerializer;
 use G\Translator\Io\Source\SourceInterface;
 
 /**
@@ -122,15 +134,26 @@ final class FormatDetector implements DetectorInterface
     /**
      * Hook for built-in driver auto-wiring.
      *
-     * Empty in Phase C — the concrete parsers and serializers land
-     * in Phase D, at which point this method instantiates every
-     * built-in and calls `registerParser()` / `registerSerializer()`.
-     * Consumers can still override any built-in afterwards via the
-     * public register methods.
+     * Instantiates every built-in parser/serializer pair eagerly so
+     * a wiring bug surfaces at detector construction time rather
+     * than at the first lookup. Consumers can override any built-in
+     * afterwards via `registerParser()` / `registerSerializer()`.
      */
     private function registerBuiltins(): void
     {
-        // No built-ins yet. See Phase D.
+        $this->registerParser(new PoParser());
+        $this->registerParser(new JsonParser());
+        $this->registerParser(new AngularJsonParser());
+        $this->registerParser(new YamlParser());
+        $this->registerParser(new PhpParser());
+        $this->registerParser(new XliffParser());
+
+        $this->registerSerializer(new PoSerializer());
+        $this->registerSerializer(new JsonSerializer());
+        $this->registerSerializer(new AngularJsonSerializer());
+        $this->registerSerializer(new YamlSerializer());
+        $this->registerSerializer(new PhpSerializer());
+        $this->registerSerializer(new XliffSerializer());
     }
 
     /**
