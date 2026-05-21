@@ -12,6 +12,34 @@ Each breaking change is explicitly listed in its section.
 
 ### Added
 
+#### Phase C — I/O sources and format detection
+
+- `G\Translator\Io\Source\FileSource`: `final readonly`
+  filesystem-backed source. Path validated in the constructor
+  (empty rejected); existence / readability / permission checks
+  deferred to `read()` for cheap construction and hot-reload
+  scenarios. Extension extracted via `pathinfo`, lowercased.
+- `G\Translator\Io\Source\StringSource`: `final readonly`
+  in-memory source. Default identifier is a stable
+  `string://<sha1-prefix>` derived from the payload (12 hex chars,
+  48 bits). Both identifier and extension can be overridden
+  explicitly via constructor args.
+- `G\Translator\Io\Source\ResourceSource`: PHP stream resource
+  source. Validates the argument is an open `stream`-type
+  resource. Reads in full on first `read()` and caches the content,
+  then releases the underlying resource for GC — `read()` is
+  idempotent across calls even on non-seekable streams
+  (`php://input`, sockets, pipes).
+- `G\Translator\Io\Detector\FormatDetector`: canonical
+  `DetectorInterface` implementation acting as both Factory and
+  Registry. Constructor wires built-ins via a private
+  `registerBuiltins()` hook reserved for Phase D; consumers can
+  call `registerParser()` / `registerSerializer()` to override
+  any built-in driver. Detection is extension-first, with
+  `resolveJsonFlavor()` content inspection to disambiguate
+  `Format::JSON` from `Format::ANGULAR_JSON`, and a content-only
+  fallback for extensionless sources.
+
 #### Phase B — Runtime layer
 
 - `G\Translator\Runtime\Placeholder\DefaultPlaceholderResolver`: canonical
@@ -91,8 +119,8 @@ Each breaking change is explicitly listed in its section.
 
 ### Tested
 
-- 221 PHPUnit tests / 284 assertions covering all Phase A and Phase B
-  classes. Highlights:
+- 264 PHPUnit tests / 340 assertions covering all Phase A, Phase B,
+  and Phase C classes. Highlights:
   - Phase A: design-documentation tests for the
     PHPDoc-as-validation trade-off, garbage-in-garbage-out semantics,
     and composite-key disambiguation under `THROW_ON_CONFLICT`.
