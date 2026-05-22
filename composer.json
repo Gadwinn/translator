@@ -55,7 +55,7 @@
         "test-unit": "php vendor/bin/phpunit --no-coverage",
         "test-unit-coverage": "php vendor/bin/phpunit --coverage-text",
         "test-examples": "php tools/run-examples.php",
-        "test-mnd": "php vendor/bin/phpmnd ./src --hint --progress --strings --extensions=assign,operation,return,condition,switch_case"
+        "test-mnd": "php vendor/bin/phpmnd ./src --hint --progress --ignore-numbers=-1,0,1 --exclude-path=Runtime/Plural --extensions=assign,operation,return,condition,switch_case"
     },
     "scripts-descriptions": {
         "install-prod": "Install dependencies for production environment",

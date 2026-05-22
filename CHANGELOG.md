@@ -12,6 +12,18 @@ Each breaking change is explicitly listed in its section.
 
 ### Fixed
 
+- `examples/_bootstrap.php`: triggered `Undefined constant STDOUT
+  / STDERR` warnings under non-CLI SAPIs because it referenced the
+  CLI-only constants unconditionally. The bootstrap is now
+  PSR1-compliant (side effects only: autoloader, `Content-Type:
+  text/plain` header when reached from the web) and delegates
+  output to `examples/_helpers.php` (function declarations only).
+  All examples now route through `example_out()`, `example_err()`
+  and `assert_same()`, which select `STDOUT` / `STDERR` under CLI
+  and echo into the response body under HTTP — a failed assertion
+  additionally sets HTTP 500 so browser devtools and reverse
+  proxies flag the failure. No example logic changes; CLI behavior
+  is byte-for-byte identical.
 - `G\Translator\Io\Serializer\JsonSerializer` and
   `G\Translator\Io\Serializer\PhpSerializer` docblocks
   incorrectly described context-collision behavior as
@@ -299,6 +311,41 @@ Each breaking change is explicitly listed in its section.
 
 ### Tooling
 
+- `composer test-mnd`: dropped `--strings`. With that flag enabled,
+  phpmnd flagged every parser literal token (`'!'`, `'?'`, `'('`,
+  `'\\'`, `'msgstr'`, `'<none>'`, ...) as a magic string, which is
+  noise for parser-heavy code where the literals ARE the syntax.
+  The script now scans for numeric magic numbers only, with
+  `--exclude-path=Runtime/Plural` (the CLDR rule families and the
+  Gettext expression parser implement specifications where the
+  numeric values ARE the spec) and `--ignore-numbers=-1,0,1` for
+  the universal "not found" / boolean sentinels. `test-all` is
+  green end-to-end again.
+- `G\Translator\Bridge\Ai\Provider\ClaudeProvider`,
+  `DeeplProvider`, `OpenAiProvider`: the `240`-char error-body
+  excerpt budget is now `ERROR_SNIPPET_MAX_LENGTH` on each
+  provider rather than an inline literal in `snippet()`.
+- `G\Translator\Http\CurlHttpClient::MICROSECONDS_PER_SECOND`:
+  replaces the inline `1_000_000` divisor in the
+  `curl_multi_select()` timeout conversion.
+- `G\Translator\Http\HttpResponse::HTTP_SUCCESS_RANGE_MIN` /
+  `HTTP_SUCCESS_RANGE_MAX`: replace the inline `200` / `300`
+  boundaries in `isSuccessful()`.
+- `G\Translator\Io\Parser\YamlParser::MIN_QUOTED_STRING_LENGTH` /
+  `INDENT_END_OF_INPUT`: replace the inline `2` (open + close
+  quote pair) and `-1` (end-of-document sentinel returned by
+  `peekIndent()`) literals.
+- `.gitattributes`: `examples/`, `tools/`, and `CHANGELOG.md` now
+  carry `export-ignore` so they stay out of `composer archive`
+  tarballs. Per-file patterns for `phpcs`, `phpstan`, and
+  `phpunit` config files collapsed into glob form
+  (`/phpcs.*`, `/phpstan.*`, `/phpunit.*`) so future variants
+  (`.dist`, `.cache`, etc.) are covered without extra entries.
+- `.gitignore`: `composer.lock` removed from the ignore list so
+  the lockfile is committed alongside `composer.json`. Tracking
+  the lockfile makes CI runs reproducible and lets reviewers see
+  exactly which dev-dependency versions a change was validated
+  against.
 - Added `autoload-dev` PSR-4 mapping `G\Translator\Tests\` → `tests/`
   to `composer.json`. The production `require` section is unchanged.
 

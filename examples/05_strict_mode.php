@@ -35,7 +35,10 @@ $translator->setStrict(true);
 
 try {
     $translator->trans('non.existing.key');
-    fwrite(STDERR, "FAIL: strict mode did not throw\n");
+    example_err("FAIL: strict mode did not throw\n");
+    if (PHP_SAPI !== 'cli') {
+        http_response_code(500);
+    }
     exit(1);
 } catch (MissingTranslationException $e) {
     // Loud failure: detect missing translations during testing.

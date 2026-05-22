@@ -1,11 +1,14 @@
 /.github            export-ignore
 /docs               export-ignore
+/examples           export-ignore
 /tests              export-ignore
+/tools              export-ignore
 /stubs              export-ignore
 /.gitattributes     export-ignore
 /.gitignore         export-ignore
 /Dockerfile         export-ignore
-/phpcs.xml          export-ignore
-/phpstan.neon       export-ignore
-/phpunit.xml        export-ignore
+/phpcs.*            export-ignore
+/phpstan.*          export-ignore
+/phpunit.*          export-ignore
+/CHANGELOG.md       export-ignore
 /README.[Mm][Dd]    export-ignore

@@ -190,8 +190,7 @@ final class XliffParser implements ParserInterface
         DOMElement $unit,
         string $domain,
         string $sourceIdentifier,
-    ): ?TranslationEntry
-    {
+    ): ?TranslationEntry {
         $id = $this->preferAttribute($unit, ['id', 'resname']);
         if ($id === null) {
             return null;
@@ -234,8 +233,7 @@ final class XliffParser implements ParserInterface
         DOMElement $unit,
         string $domain,
         string $sourceIdentifier,
-    ): TranslationEntry
-    {
+    ): TranslationEntry {
         $id = $unit->getAttribute('id');
         if ($id === '') {
             throw new ParserException(sprintf(

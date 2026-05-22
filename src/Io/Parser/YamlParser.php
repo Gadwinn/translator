@@ -59,6 +59,18 @@ final class YamlParser implements ParserInterface
      */
     private const string DOCUMENT_START = '---';
 
+    /**
+     * @var int Minimum length of a quoted string — an opening quote
+     *      plus a closing quote (`""` and `''` both qualify).
+     */
+    private const int MIN_QUOTED_STRING_LENGTH = 2;
+
+    /**
+     * @var int Sentinel returned by `peekIndent()` when the cursor
+     *      has already moved past the last line of the document.
+     */
+    private const int INDENT_END_OF_INPUT = -1;
+
     public function parse(
         SourceInterface $source,
         string $locale,
@@ -198,7 +210,7 @@ final class YamlParser implements ParserInterface
     private function peekIndent(array $lines, int $cursor, string $sourceIdentifier): int
     {
         if (!isset($lines[$cursor])) {
-            return -1;
+            return self::INDENT_END_OF_INPUT;
         }
 
         return $this->indentOf($lines[$cursor], $sourceIdentifier);
@@ -271,11 +283,19 @@ final class YamlParser implements ParserInterface
             ));
         }
 
-        if (str_starts_with($value, "'") && str_ends_with($value, "'") && strlen($value) >= 2) {
+        if (
+            str_starts_with($value, "'")
+            && str_ends_with($value, "'")
+            && strlen($value) >= self::MIN_QUOTED_STRING_LENGTH
+        ) {
             return str_replace("''", "'", substr($value, 1, -1));
         }
 
-        if (str_starts_with($value, '"') && str_ends_with($value, '"') && strlen($value) >= 2) {
+        if (
+            str_starts_with($value, '"')
+            && str_ends_with($value, '"')
+            && strlen($value) >= self::MIN_QUOTED_STRING_LENGTH
+        ) {
             return $this->unescapeDoubleQuoted(substr($value, 1, -1));
         }
 

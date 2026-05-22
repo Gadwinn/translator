@@ -61,6 +61,13 @@ final class CurlHttpClient implements HttpClientInterface
      */
     private const int MULTI_SELECT_TIMEOUT_MICROSECONDS = 100000;
 
+    /**
+     * @var int Microseconds per second — divisor that converts the
+     *      microsecond budget above into the fractional-second value
+     *      expected by `curl_multi_select()`.
+     */
+    private const int MICROSECONDS_PER_SECOND = 1_000_000;
+
     public function __construct(
         private readonly bool $allowHttp = false,
     ) {
@@ -115,7 +122,7 @@ final class CurlHttpClient implements HttpClientInterface
         do {
             $status = curl_multi_exec($multi, $stillRunning);
             if ($stillRunning > 0) {
-                curl_multi_select($multi, self::MULTI_SELECT_TIMEOUT_MICROSECONDS / 1_000_000);
+                curl_multi_select($multi, self::MULTI_SELECT_TIMEOUT_MICROSECONDS / self::MICROSECONDS_PER_SECOND);
             }
         } while ($stillRunning > 0 && $status === CURLM_OK);
 

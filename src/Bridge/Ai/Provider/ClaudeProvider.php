@@ -89,6 +89,13 @@ final class ClaudeProvider implements AiProviderInterface
     private const int HTTP_TOO_MANY_REQUESTS = 429;
 
     /**
+     * Maximum length of an error-body excerpt embedded in thrown
+     * `AiProviderException` messages — keeps stack traces readable
+     * when the API returns a large HTML or JSON payload on failure.
+     */
+    private const int ERROR_SNIPPET_MAX_LENGTH = 240;
+
+    /**
      * @param HttpClientInterface $http The transport used to issue
      *        requests. Inject `CurlHttpClient` for the default,
      *        a mock for tests.
@@ -362,11 +369,10 @@ final class ClaudeProvider implements AiProviderInterface
 
     private function snippet(string $body): string
     {
-        $maxLength = 240;
-        if (strlen($body) <= $maxLength) {
+        if (strlen($body) <= self::ERROR_SNIPPET_MAX_LENGTH) {
             return $body;
         }
 
-        return substr($body, 0, $maxLength) . '...';
+        return substr($body, 0, self::ERROR_SNIPPET_MAX_LENGTH) . '...';
     }
 }

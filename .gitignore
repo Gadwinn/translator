@@ -40,7 +40,6 @@ logs/*
 
 # Ignore composer backup files
 composer.phar
-composer.lock
 
 # Ignore version control history
 .history
