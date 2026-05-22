@@ -1,0 +1,16 @@
+msgid ""
+msgstr ""
+"Language: en\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "fallback.only"
+msgstr "EN fallback value"
+
+msgid "Hello %name%"
+msgstr "Hello %name%"
+
+msgid "One apple"
+msgid_plural "{count} apples"
+msgstr[0] "One apple"
+msgstr[1] "{count} apples"

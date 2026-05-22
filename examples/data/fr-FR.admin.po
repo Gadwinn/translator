@@ -1,0 +1,7 @@
+msgid ""
+msgstr ""
+"Language: fr_FR\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+
+msgid "Welcome"
+msgstr "Bienvenue admin"

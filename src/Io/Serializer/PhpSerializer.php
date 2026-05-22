@@ -32,8 +32,10 @@ use G\Translator\Enum\Format;
  *
  *   - Plural forms are NOT emitted (only `content()` is exported).
  *   - Metadata is NOT emitted.
- *   - Context-disambiguated entries collide; the first one written
- *     wins.
+ *   - Context-disambiguated entries collide; PHP's
+ *     last-assignment-wins semantics apply, so the last entry
+ *     written to the array for a given id overwrites earlier
+ *     ones.
  */
 final class PhpSerializer implements SerializerInterface
 {

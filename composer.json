@@ -44,6 +44,7 @@
             "@test-dag",
             "@test-stan",
             "@test-unit",
+            "@test-examples",
             "@test-mnd"
         ],
         "security-audit": "composer audit --no-dev --format=summary --abandoned=report",
@@ -53,6 +54,7 @@
         "test-stan": "php vendor/bin/phpstan",
         "test-unit": "php vendor/bin/phpunit --no-coverage",
         "test-unit-coverage": "php vendor/bin/phpunit --coverage-text",
+        "test-examples": "php tools/run-examples.php",
         "test-mnd": "php vendor/bin/phpmnd ./src --hint --progress --strings --extensions=assign,operation,return,condition,switch_case"
     },
     "scripts-descriptions": {
@@ -66,6 +68,7 @@
         "test-stan": "Run static analysis using PHPStan",
         "test-unit": "Run unit tests with PHPUnit",
         "test-unit-coverage": "Run unit tests with PHPUnit and generate code coverage report",
+        "test-examples": "Run every examples/NN_*.php script and fail when any of them exits non-zero",
         "test-mnd": "Detect magic numbers in the codebase"
     }
 }

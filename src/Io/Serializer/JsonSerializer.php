@@ -28,7 +28,10 @@ use JsonException;
  *   - Context (`msgctxt`) is NOT emitted — entries with a
  *     non-null context are serialized using the bare id, which
  *     means two entries sharing the same id but with different
- *     contexts WILL collide. The first one written wins.
+ *     contexts WILL collide. PHP's last-assignment-wins semantics
+ *     apply: the last entry written to the array for a given id
+ *     overwrites earlier ones. Iteration order is the bag's
+ *     iteration order.
  */
 final class JsonSerializer implements SerializerInterface
 {

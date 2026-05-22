@@ -10,7 +10,45 @@ Each breaking change is explicitly listed in its section.
 
 ## [Unreleased]
 
+### Fixed
+
+- `G\Translator\Io\Serializer\JsonSerializer` and
+  `G\Translator\Io\Serializer\PhpSerializer` docblocks
+  incorrectly described context-collision behavior as
+  "first-write-wins". The actual code is PHP's standard
+  `$data[$id] = $content` which is last-write-wins. Docblocks
+  updated to match the implementation; code behavior is
+  unchanged. Caught by the new example 07 round-trip.
+
 ### Added
+
+#### Phase G addendum — Runnable README examples
+
+- `examples/01_load_and_translate.php` through
+  `examples/10_procedural_api.php`: one runnable script per README
+  section. Each is invokable as `php examples/NN_*.php` from the
+  repo root and exits non-zero on any deviation from the README's
+  documented output. The scripts use FileSource + the existing PO
+  format pair for sections 1-5, the engine for section 6, the
+  JSON serializer for section 7, and the package's own
+  `StubAiProvider` / `StubHttpClient` from `tests/Stub/` for the
+  AI sections (8 and 9) — no live API calls, no API keys required.
+- `examples/data/fr-FR.po`, `examples/data/fr-FR.admin.po`,
+  `examples/data/en.po`: small PO fixtures exercising singular,
+  plural, msgctxt, and multi-domain entries.
+- `examples/_bootstrap.php`: shared loader + `assert_same()`
+  helper that surfaces deviations to STDERR and exits 1 so the
+  runner picks them up.
+- `tools/run-examples.php`: example runner used by
+  `composer test-examples` and the CI workflow. Invokes every
+  `examples/NN_*.php` script in a child PHP process, captures
+  stdout/stderr, and fails when any of them exits non-zero with
+  a per-script summary.
+- `composer.json`: new `test-examples` script wired into
+  `test-all` between `test-unit` and `test-mnd` so example
+  regressions break the standard local CI loop.
+- `.github/workflows/ci.yml`: example runner added to every PHP
+  matrix entry so a broken README example fails CI before merge.
 
 #### Phase G — Tooling, CI, and procedural API tests
 
