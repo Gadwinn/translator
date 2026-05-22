@@ -41,6 +41,7 @@
             "@security-audit",
             "@test-phpcbf",
             "@test-cs",
+            "@test-dag",
             "@test-stan",
             "@test-unit",
             "@test-mnd"
@@ -48,6 +49,7 @@
         "security-audit": "composer audit --no-dev --format=summary --abandoned=report",
         "test-phpcbf": "php vendor/bin/phpcbf || exit 0",
         "test-cs": "php vendor/bin/phpcs",
+        "test-dag": "php tools/check-dag.php",
         "test-stan": "php vendor/bin/phpstan",
         "test-unit": "php vendor/bin/phpunit --no-coverage",
         "test-unit-coverage": "php vendor/bin/phpunit --coverage-text",
@@ -60,6 +62,7 @@
         "security-audit": "Check for security vulnerabilities in dependencies",
         "test-phpcbf": "Automatically fix code style issues using PHP Code Beautifier and Fixer",
         "test-cs": "Run code style checks using PHP_CodeSniffer",
+        "test-dag": "Verify the layered-architecture DAG against the rules in copilot-instructions.md",
         "test-stan": "Run static analysis using PHPStan",
         "test-unit": "Run unit tests with PHPUnit",
         "test-unit-coverage": "Run unit tests with PHPUnit and generate code coverage report",

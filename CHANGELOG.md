@@ -12,6 +12,37 @@ Each breaking change is explicitly listed in its section.
 
 ### Added
 
+#### Phase G — Tooling, CI, and procedural API tests
+
+- `tools/check-dag.php`: standalone script that walks every PHP
+  file under `src/`, extracts every `use` statement targeting
+  `G\Translator\*`, and enforces the layered DAG documented in
+  `.github/copilot-instructions.md` section 3 (Bridge → Runtime →
+  Engine → Bag → Io → Exception/Enum, with Http transverse and
+  Functions on top of Runtime). Same-layer and external imports
+  are always allowed. Exits non-zero with a per-violation report
+  when a forbidden direction is found.
+- `tests/Tools/DagCheckTest.php`: PHPUnit wrapper that shells out
+  to the script so CI runs the check via the regular `phpunit`
+  invocation.
+- `tests/Functions/TranslateFunctionsTest.php`: smoke test for the
+  opt-in procedural API. Loads `src/Functions/translate.php` once
+  and asserts each of the eight `__*()` functions delegates to the
+  expected `trans()` / `plural()` method with the right arguments
+  on the underlying translator. Covers scope switching via
+  `TranslatorRegistry::use()` and the empty-registry error path.
+- `tests/Stub/StubTranslator.php`: `TranslatorInterface`
+  implementation that records every call, used by the procedural
+  API test.
+- `.github/workflows/ci.yml`: GitHub Actions matrix workflow
+  exercising PHP 8.3, 8.4, and 8.5 on Linux. Runs `composer
+  validate`, the DAG check, PHPStan, PHPUnit, and (advisory)
+  PHP_CodeSniffer.
+- `composer.json`: new `test-dag` script (`php tools/check-dag.php`)
+  added to the `test-all` pipeline between `test-cs` and `test-stan`
+  so the architectural check runs alongside style and static
+  analysis locally.
+
 #### Phase F — HTTP transport + AI providers
 
 - `G\Translator\Http\CurlHttpClient`: default
