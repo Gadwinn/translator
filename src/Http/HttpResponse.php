@@ -18,6 +18,16 @@ namespace G\Translator\Http;
 final readonly class HttpResponse
 {
     /**
+     * @var int Lower bound (inclusive) of the HTTP 2xx success range.
+     */
+    private const int HTTP_SUCCESS_RANGE_MIN = 200;
+
+    /**
+     * @var int Upper bound (exclusive) of the HTTP 2xx success range.
+     */
+    private const int HTTP_SUCCESS_RANGE_MAX = 300;
+
+    /**
      * @param int $statusCode The HTTP status code returned by the
      *        remote server (e.g., 200, 401, 429, 500).
      * @param array<non-empty-string, string> $headers Response
@@ -39,6 +49,7 @@ final readonly class HttpResponse
      */
     public function isSuccessful(): bool
     {
-        return $this->statusCode >= 200 && $this->statusCode < 300;
+        return $this->statusCode >= self::HTTP_SUCCESS_RANGE_MIN
+            && $this->statusCode < self::HTTP_SUCCESS_RANGE_MAX;
     }
 }

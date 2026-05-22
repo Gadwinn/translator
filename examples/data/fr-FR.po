@@ -1,0 +1,21 @@
+msgid ""
+msgstr ""
+"Language: fr_FR\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+msgid "Hello %name%"
+msgstr "Bonjour %name%"
+
+msgctxt "noun"
+msgid "Post"
+msgstr "Article"
+
+msgctxt "verb"
+msgid "Post"
+msgstr "Publier"
+
+msgid "One apple"
+msgid_plural "{count} apples"
+msgstr[0] "Une pomme"
+msgstr[1] "{count} pommes"
