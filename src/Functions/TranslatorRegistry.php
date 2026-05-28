@@ -56,6 +56,8 @@ final class TranslatorRegistry
 
     /**
      * Private constructor: this class is never instantiated.
+     *
+     * @codeCoverageIgnore
      */
     private function __construct()
     {

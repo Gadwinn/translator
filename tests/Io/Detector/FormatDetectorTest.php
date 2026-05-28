@@ -184,6 +184,14 @@ final class FormatDetectorTest extends TestCase
         self::assertSame($second, $detector->parserFor($source));
     }
 
+    public function testEmptyJsonFileWithExtensionResolvesToJson(): void
+    {
+        $detector = new FormatDetector();
+        $source = new StringSource('', extension: 'json');
+
+        self::assertSame(Format::JSON, $detector->detectFormat($source));
+    }
+
     private function stubParser(Format $format): ParserInterface
     {
         return new class ($format) implements ParserInterface {

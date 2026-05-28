@@ -208,6 +208,120 @@ final class ClaudeProviderTest extends TestCase
         self::assertSame([], $provider->translateBatch([]));
     }
 
+    public function testNonArrayContentBlocksAreSkipped(): void
+    {
+        $http = new StubHttpClient();
+        // First block is a bare string (not an array), second block is
+        // the actual text. The non-array block must be silently skipped.
+        $http->enqueueResponse(new HttpResponse(200, [], json_encode([
+            'content' => [
+                'not-an-array',
+                ['type' => 'text', 'text' => json_encode(['translatedText' => 'Bonjour'])],
+            ],
+        ]) ?: '{}'));
+        $provider = new ClaudeProvider($http, 'sk');
+
+        $result = $provider->translate(self::sampleRequest());
+
+        self::assertSame('Bonjour', $result->translatedText);
+    }
+
+    public function testEmptyTextBlockYieldsEmptyTranslation(): void
+    {
+        $http = new StubHttpClient();
+        $http->enqueueResponse(new HttpResponse(200, [], json_encode([
+            'content' => [['type' => 'text', 'text' => '   ']],
+        ]) ?: '{}'));
+        $provider = new ClaudeProvider($http, 'sk');
+
+        $result = $provider->translate(self::sampleRequest());
+
+        self::assertSame('', $result->translatedText);
+    }
+
+    public function testTextBlockWithInvalidJsonRaisesProviderException(): void
+    {
+        $http = new StubHttpClient();
+        $http->enqueueResponse(new HttpResponse(200, [], json_encode([
+            'content' => [['type' => 'text', 'text' => '{not json']],
+        ]) ?: '{}'));
+        $provider = new ClaudeProvider($http, 'sk');
+
+        $this->expectException(AiProviderException::class);
+        $this->expectExceptionMessage('not the expected JSON envelope');
+        $provider->translate(self::sampleRequest());
+    }
+
+    public function testTextBlockWithScalarJsonRaisesProviderException(): void
+    {
+        $http = new StubHttpClient();
+        // Valid JSON, but a scalar (string), not an object.
+        $http->enqueueResponse(new HttpResponse(200, [], json_encode([
+            'content' => [['type' => 'text', 'text' => '"just a string"']],
+        ]) ?: '{}'));
+        $provider = new ClaudeProvider($http, 'sk');
+
+        $this->expectException(AiProviderException::class);
+        $this->expectExceptionMessage('non-object value');
+        $provider->translate(self::sampleRequest());
+    }
+
+    public function testMissingTextContentBlockRaisesException(): void
+    {
+        $http = new StubHttpClient();
+        // content array exists but no block of type "text".
+        $http->enqueueResponse(new HttpResponse(200, [], json_encode([
+            'content' => [['type' => 'image', 'source' => 'whatever']],
+        ]) ?: '{}'));
+        $provider = new ClaudeProvider($http, 'sk');
+
+        $this->expectException(AiProviderException::class);
+        $this->expectExceptionMessage('did not contain a "text" content block');
+        $provider->translate(self::sampleRequest());
+    }
+
+    public function testLongErrorBodyIsTruncatedInExceptionMessage(): void
+    {
+        $http = new StubHttpClient();
+        $http->enqueueResponse(new HttpResponse(500, [], str_repeat('C', 500)));
+        $provider = new ClaudeProvider($http, 'sk');
+
+        try {
+            $provider->translate(self::sampleRequest());
+            self::fail('Expected AiProviderException');
+        } catch (AiProviderException $e) {
+            self::assertStringContainsString('...', $e->getMessage());
+        }
+    }
+
+    public function testInvalidPluralEntriesAreSilentlyDropped(): void
+    {
+        $http = new StubHttpClient();
+        $http->enqueueResponse(self::successResponse(self::claudeBody([
+            'translatedText' => 'Une pomme',
+            'plurals' => [
+                'one'   => 'Une pomme',
+                'other' => '%count% pommes',
+                'bogus' => 'invalid CLDR category, dropped',
+                42      => 'non-string key, dropped',
+                'few'   => 99, // non-string value, dropped
+            ],
+        ])));
+        $provider = new ClaudeProvider($http, 'sk');
+
+        $result = $provider->translate(new TranslationRequest(
+            sourceText: 'One apple',
+            sourceLocale: 'en',
+            targetLocale: 'fr',
+            sourcePluralText: '%count% apples',
+        ));
+
+        self::assertSame(
+            ['one', 'other'],
+            array_keys($result->translatedPluralForms),
+        );
+    }
+
     private static function sampleRequest(): TranslationRequest
     {
         return new TranslationRequest(

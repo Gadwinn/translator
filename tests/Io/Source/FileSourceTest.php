@@ -67,4 +67,23 @@ final class FileSourceTest extends TestCase
         $this->expectException(SourceNotFoundException::class);
         $source->read();
     }
+
+    public function testReadThrowsWhenFileNotReadable(): void
+    {
+        if (DIRECTORY_SEPARATOR === '\\') {
+            self::markTestSkipped('chmod-based unreadable file requires POSIX permissions.');
+        }
+        if (posix_geteuid() === 0) {
+            self::markTestSkipped('root bypasses POSIX permission checks.');
+        }
+
+        chmod($this->tempPath, 0o000);
+        try {
+            $source = new FileSource($this->tempPath);
+            $this->expectException(SourceNotFoundException::class);
+            $source->read();
+        } finally {
+            chmod($this->tempPath, 0o644);
+        }
+    }
 }

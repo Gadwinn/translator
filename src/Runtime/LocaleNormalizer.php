@@ -56,6 +56,8 @@ final class LocaleNormalizer
     /**
      * Private constructor: this class is a static utility and is
      * never instantiated.
+     *
+     * @codeCoverageIgnore
      */
     private function __construct()
     {

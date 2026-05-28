@@ -236,4 +236,243 @@ final class PoParserTest extends TestCase
 
         self::assertSame('x', $bag->all()[0]->id());
     }
+
+    public function testParseEscapeSequenceCarriageReturn(): void
+    {
+        $source = new StringSource('msgid "x"' . "\n" . 'msgstr "line1\rline2"');
+        $bag = (new PoParser())->parse($source, 'en');
+
+        self::assertSame("line1\rline2", $bag->all()[0]->content());
+    }
+
+    public function testParsePreviousMsgidAndObsoleteCommentsAreIgnored(): void
+    {
+        $source = new StringSource(
+            <<<'PO'
+            #| msgid "previous"
+            #~ obsolete entry
+            msgid "x"
+            msgstr "y"
+            PO,
+        );
+
+        $bag = (new PoParser())->parse($source, 'en');
+
+        self::assertCount(1, $bag);
+        $entry = $bag->all()[0];
+        self::assertArrayNotHasKey('comments', $entry->metadata());
+    }
+
+    public function testParseEmptyReferenceAndFlagCommentsAreIgnored(): void
+    {
+        $source = new StringSource(
+            <<<'PO'
+            #:
+            #,
+            msgid "x"
+            msgstr "y"
+            PO,
+        );
+
+        $bag = (new PoParser())->parse($source, 'en');
+        $entry = $bag->all()[0];
+
+        self::assertArrayNotHasKey('references', $entry->metadata());
+        self::assertArrayNotHasKey('flags', $entry->metadata());
+    }
+
+    public function testParseCommentOnlyBlockIsSkipped(): void
+    {
+        // A comment-only block (no msgid/msgstr) parses to id === null
+        // and is silently dropped.
+        $source = new StringSource(
+            <<<'PO'
+            # standalone comment with no message
+
+            msgid "real"
+            msgstr "value"
+            PO,
+        );
+
+        $bag = (new PoParser())->parse($source, 'en');
+
+        self::assertCount(1, $bag);
+        self::assertSame('real', $bag->all()[0]->id());
+    }
+
+    public function testParseHeaderWithMalformedLines(): void
+    {
+        // Header has a line without `:` and a line with empty key —
+        // both must be silently ignored by parseHeader().
+        $source = new StringSource(
+            <<<'PO'
+            msgid ""
+            msgstr ""
+            "Language: fr_FR\n"
+            "broken-line-without-colon\n"
+            ": value-with-empty-key\n"
+
+            msgid "x"
+            msgstr "y"
+            PO,
+        );
+
+        $bag = (new PoParser())->parse($source, 'fr-FR');
+        $header = $bag->all()[0]->metadata()['po-header'] ?? [];
+
+        self::assertSame('fr_FR', $header['Language'] ?? null);
+        self::assertArrayNotHasKey('', $header);
+    }
+
+    public function testNoPluralFormsHeaderFallsBackToDefaultNplurals(): void
+    {
+        $source = new StringSource(
+            <<<'PO'
+            msgid ""
+            msgstr ""
+            "Language: en\n"
+
+            msgid "One"
+            msgid_plural "Many"
+            msgstr[0] "One"
+            msgstr[1] "Many"
+            PO,
+        );
+
+        $bag = (new PoParser())->parse($source, 'en');
+        $entry = $bag->get('One');
+        $forms = $entry->pluralForms();
+
+        self::assertSame('One', $forms[PluralCategory::ONE->value]);
+        self::assertSame('Many', $forms[PluralCategory::OTHER->value]);
+    }
+
+    public function testMalformedNpluralsExpressionFallsBackToDefault(): void
+    {
+        $source = new StringSource(
+            <<<'PO'
+            msgid ""
+            msgstr ""
+            "Plural-Forms: garbage with no nplurals declaration\n"
+
+            msgid "One"
+            msgid_plural "Many"
+            msgstr[0] "One"
+            msgstr[1] "Many"
+            PO,
+        );
+
+        $bag = (new PoParser())->parse($source, 'en');
+        $forms = $bag->get('One')->pluralForms();
+
+        self::assertSame('One', $forms[PluralCategory::ONE->value]);
+        self::assertSame('Many', $forms[PluralCategory::OTHER->value]);
+    }
+
+    public function testOutOfRangeNpluralsValueFallsBackToDefault(): void
+    {
+        $source = new StringSource(
+            <<<'PO'
+            msgid ""
+            msgstr ""
+            "Plural-Forms: nplurals=0; plural=0;\n"
+
+            msgid "One"
+            msgid_plural "Many"
+            msgstr[0] "One"
+            msgstr[1] "Many"
+            PO,
+        );
+
+        $bag = (new PoParser())->parse($source, 'en');
+        $forms = $bag->get('One')->pluralForms();
+
+        self::assertSame('One', $forms[PluralCategory::ONE->value]);
+        self::assertSame('Many', $forms[PluralCategory::OTHER->value]);
+    }
+
+    public function testEmptyPluralMsgstrsYieldNoPluralForms(): void
+    {
+        $source = new StringSource(
+            <<<'PO'
+            msgid "One"
+            msgid_plural "Many"
+            msgstr[0] ""
+            msgstr[1] ""
+            PO,
+        );
+
+        $bag = (new PoParser())->parse($source, 'en');
+        $entry = $bag->get('One');
+
+        self::assertSame([], $entry->pluralForms());
+    }
+
+    public function testParseMultilineMsgctxt(): void
+    {
+        // msgctxt followed by continuation lines exercises the
+        // 'context' branch of appendContinuation().
+        $source = new StringSource(
+            <<<'PO'
+            msgctxt ""
+            "long-"
+            "context"
+            msgid "Post"
+            msgstr "Article"
+            PO,
+        );
+
+        $bag = (new PoParser())->parse($source, 'en');
+
+        self::assertSame('Article', $bag->get('Post', context: 'long-context')->content());
+    }
+
+    public function testParseMultilineMsgidPlural(): void
+    {
+        // msgid_plural followed by continuation lines exercises the
+        // 'plural' branch of appendContinuation().
+        $source = new StringSource(
+            <<<'PO'
+            msgid "One"
+            msgid_plural ""
+            "Several "
+            "Items"
+            msgstr[0] "Un"
+            msgstr[1] "Plusieurs articles"
+            PO,
+        );
+
+        $bag = (new PoParser())->parse($source, 'fr-FR');
+        $entry = $bag->get('One');
+
+        self::assertSame('Several Items', $entry->metadata()['msgid_plural']);
+    }
+
+    public function testParseUnknownEscapeSequencePreservesBackslash(): void
+    {
+        // \x is unknown — the default branch of unescape() emits the
+        // backslash followed by the literal next character.
+        $source = new StringSource('msgid "x"' . "\n" . 'msgstr "ab\\xcd"');
+
+        $bag = (new PoParser())->parse($source, 'en');
+
+        self::assertSame('ab\\xcd', $bag->all()[0]->content());
+    }
+
+    public function testEmptyMsgidWithContextRaisesException(): void
+    {
+        // msgid "" with a non-null context is NOT a header (isHeaderBlock
+        // requires context to be null/empty) → buildEntry sees an empty id.
+        $source = new StringSource(
+            <<<'PO'
+            msgctxt "ctx"
+            msgid ""
+            msgstr "value"
+            PO,
+        );
+
+        $this->expectException(ParserException::class);
+        $this->expectExceptionMessage('non-header entry with empty msgid');
+        (new PoParser())->parse($source, 'en');
+    }
 }

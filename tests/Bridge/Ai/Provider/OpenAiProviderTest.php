@@ -137,6 +137,166 @@ final class OpenAiProviderTest extends TestCase
         $provider->translate(self::sampleRequest());
     }
 
+    public function testEmptyBatchReturnsEmptyArray(): void
+    {
+        $http = new StubHttpClient();
+        $provider = new OpenAiProvider($http, 'sk');
+
+        self::assertSame([], $provider->translateBatch([]));
+    }
+
+    public function testInvalidJsonBodyRaisesProviderException(): void
+    {
+        $http = new StubHttpClient();
+        $http->enqueueResponse(new HttpResponse(200, [], '{not json'));
+        $provider = new OpenAiProvider($http, 'sk');
+
+        $this->expectException(AiProviderException::class);
+        $this->expectExceptionMessage('OpenAI returned a body that is not valid JSON');
+        $provider->translate(self::sampleRequest());
+    }
+
+    public function testEmptyMessageContentYieldsEmptyTranslation(): void
+    {
+        $http = new StubHttpClient();
+        $http->enqueueResponse(new HttpResponse(200, [], json_encode([
+            'choices' => [['message' => ['content' => '   ']]],
+        ]) ?: '{}'));
+        $provider = new OpenAiProvider($http, 'sk');
+
+        $result = $provider->translate(self::sampleRequest());
+
+        self::assertSame('', $result->translatedText);
+    }
+
+    public function testInvalidPluralCategoryEntriesAreSilentlyDropped(): void
+    {
+        $http = new StubHttpClient();
+        $http->enqueueResponse(self::successResponse(self::openAiBody([
+            'translatedText' => 'Une pomme',
+            'plurals' => [
+                'one'      => 'Une pomme',
+                'other'    => '%count% pommes',
+                'bogus'    => 'invalid category, dropped',
+                42         => 'non-string key, dropped',
+                'few'      => 99, // non-string value, dropped
+            ],
+        ])));
+        $provider = new OpenAiProvider($http, 'sk');
+
+        $result = $provider->translate(new TranslationRequest(
+            sourceText: 'One apple',
+            sourceLocale: 'en',
+            targetLocale: 'fr',
+            sourcePluralText: '%count% apples',
+        ));
+
+        self::assertSame(
+            ['one', 'other'],
+            array_keys($result->translatedPluralForms),
+        );
+    }
+
+    public function testRequestIncludesContextWhenProvided(): void
+    {
+        $http = new StubHttpClient();
+        $http->enqueueResponse(self::successResponse(self::openAiBody(['translatedText' => 'x'])));
+        $provider = new OpenAiProvider($http, 'sk');
+
+        $provider->translate(new TranslationRequest(
+            sourceText: 'Hi',
+            sourceLocale: 'en',
+            targetLocale: 'fr',
+            context: 'a friendly greeting',
+        ));
+
+        self::assertStringContainsString('friendly greeting', $http->sent[0]->body ?? '');
+    }
+
+    public function testMissingChoicesArrayRaisesException(): void
+    {
+        $http = new StubHttpClient();
+        $http->enqueueResponse(new HttpResponse(200, [], '{"unrelated":"shape"}'));
+        $provider = new OpenAiProvider($http, 'sk');
+
+        $this->expectException(AiProviderException::class);
+        $this->expectExceptionMessage('missing the "choices" array');
+        $provider->translate(self::sampleRequest());
+    }
+
+    public function testChoiceWithoutMessageRaisesException(): void
+    {
+        $http = new StubHttpClient();
+        $http->enqueueResponse(new HttpResponse(200, [], json_encode([
+            'choices' => [['finish_reason' => 'stop']],
+        ]) ?: '{}'));
+        $provider = new OpenAiProvider($http, 'sk');
+
+        $this->expectException(AiProviderException::class);
+        $this->expectExceptionMessage('choice has no "message"');
+        $provider->translate(self::sampleRequest());
+    }
+
+    public function testMessageContentNonStringRaisesException(): void
+    {
+        $http = new StubHttpClient();
+        $http->enqueueResponse(new HttpResponse(200, [], json_encode([
+            'choices' => [['message' => ['content' => 42]]],
+        ]) ?: '{}'));
+        $provider = new OpenAiProvider($http, 'sk');
+
+        $this->expectException(AiProviderException::class);
+        $this->expectExceptionMessage('no string "content"');
+        $provider->translate(self::sampleRequest());
+    }
+
+    public function testStructuredTextScalarRaisesException(): void
+    {
+        $http = new StubHttpClient();
+        // Valid JSON inside content, but a scalar (number), not an object.
+        $http->enqueueResponse(new HttpResponse(200, [], json_encode([
+            'choices' => [['message' => ['content' => '42']]],
+        ]) ?: '{}'));
+        $provider = new OpenAiProvider($http, 'sk');
+
+        $this->expectException(AiProviderException::class);
+        $this->expectExceptionMessage('non-object value');
+        $provider->translate(self::sampleRequest());
+    }
+
+    public function testLongErrorBodyIsTruncatedInExceptionMessage(): void
+    {
+        $http = new StubHttpClient();
+        $http->enqueueResponse(new HttpResponse(500, [], str_repeat('B', 500)));
+        $provider = new OpenAiProvider($http, 'sk');
+
+        try {
+            $provider->translate(self::sampleRequest());
+            self::fail('Expected AiProviderException');
+        } catch (AiProviderException $e) {
+            self::assertStringContainsString('...', $e->getMessage());
+        }
+    }
+
+    public function testPluralFormsWithoutOtherCategoryRaisesException(): void
+    {
+        $http = new StubHttpClient();
+        $http->enqueueResponse(self::successResponse(self::openAiBody([
+            'translatedText' => 'X',
+            'plurals' => ['one' => 'Une pomme'], // no "other" key
+        ])));
+        $provider = new OpenAiProvider($http, 'sk');
+
+        $this->expectException(AiProviderException::class);
+        $this->expectExceptionMessage('mandatory "other" category');
+        $provider->translate(new TranslationRequest(
+            sourceText: 'One apple',
+            sourceLocale: 'en',
+            targetLocale: 'fr',
+            sourcePluralText: '%count% apples',
+        ));
+    }
+
     public function testTranslateBatchPreservesKeys(): void
     {
         $http = new StubHttpClient();

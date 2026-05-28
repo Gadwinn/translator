@@ -45,6 +45,8 @@ use G\Translator\Exception\Bridge\HttpTransportException;
  * layer. Successful responses for the surviving requests are
  * intentionally NOT returned alongside the exception — the contract
  * is "all or nothing" for callers reading per-key results.
+ *
+ * @codeCoverageIgnore
  */
 final class CurlHttpClient implements HttpClientInterface
 {

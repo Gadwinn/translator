@@ -142,4 +142,16 @@ $this->resolver->resolve('Hello %name%', ['name' => new \stdClass()]);
         $out = $this->resolver->resolve('name is name', ['name' => 'Willy']);
         self::assertSame('name is name', $out);
     }
+
+    public function testSprintfMissingParamLeavesTokenUntouched(): void
+    {
+        $out = $this->resolver->resolve('%s and %s', ['Willy']);
+        self::assertSame('Willy and %s', $out);
+    }
+
+    public function testBraceNamedUnmatchedIsLeftUntouched(): void
+    {
+        $out = $this->resolver->resolve('Hello {name}', []);
+        self::assertSame('Hello {name}', $out);
+    }
 }

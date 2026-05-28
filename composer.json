@@ -53,7 +53,7 @@
         "test-dag": "php tools/check-dag.php",
         "test-stan": "php vendor/bin/phpstan",
         "test-unit": "php vendor/bin/phpunit --no-coverage",
-        "test-unit-coverage": "php vendor/bin/phpunit --coverage-text",
+        "test-unit-coverage": "php -d xdebug.mode=coverage vendor/bin/phpunit --coverage-text",
         "test-examples": "php tools/run-examples.php",
         "test-mnd": "php vendor/bin/phpmnd ./src --hint --progress --ignore-numbers=-1,0,1 --exclude-path=Runtime/Plural --extensions=assign,operation,return,condition,switch_case"
     },

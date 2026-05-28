@@ -154,4 +154,86 @@ final class XliffRoundtripTest extends TestCase
         self::assertStringContainsString('<source>hello</source>', $out);
         self::assertStringContainsString('<target>Hello</target>', $out);
     }
+
+    public function testEmptyXliffContentReturnsEmptyBag(): void
+    {
+        $bag = (new XliffParser())->parse(new StringSource(''), 'fr-FR');
+        self::assertCount(0, $bag);
+    }
+
+    public function testParserFormat(): void
+    {
+        self::assertSame(\G\Translator\Enum\Format::XLIFF, (new XliffParser())->format());
+    }
+
+    public function testSerializerFormat(): void
+    {
+        self::assertSame(\G\Translator\Enum\Format::XLIFF, (new XliffSerializer())->format());
+    }
+
+    public function testTransUnitWithoutIdOrResnameIsSkipped(): void
+    {
+        $xml = <<<'XML'
+            <?xml version="1.0" encoding="UTF-8"?>
+            <xliff version="1.2" xmlns="urn:oasis:names:tc:xliff:document:1.2">
+              <file source-language="en" target-language="fr-FR" datatype="plaintext" original="messages">
+                <body>
+                  <trans-unit>
+                    <source>No id here</source>
+                    <target>Pas d'id</target>
+                  </trans-unit>
+                  <trans-unit id="hello">
+                    <source>Hello</source>
+                    <target>Bonjour</target>
+                  </trans-unit>
+                </body>
+              </file>
+            </xliff>
+            XML;
+
+        $bag = (new XliffParser())->parse(new StringSource($xml), 'fr-FR');
+        self::assertCount(1, $bag);
+        self::assertSame('Bonjour', $bag->get('hello')->content());
+    }
+
+    public function testXliff20UnitMissingIdThrows(): void
+    {
+        $xml = <<<'XML'
+            <?xml version="1.0" encoding="UTF-8"?>
+            <xliff version="2.0" xmlns="urn:oasis:names:tc:xliff:document:2.0" srcLang="en" trgLang="fr-FR">
+              <file id="messages">
+                <unit>
+                  <segment>
+                    <source>Hello</source>
+                    <target>Bonjour</target>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            XML;
+
+        $this->expectException(ParserException::class);
+        (new XliffParser())->parse(new StringSource($xml), 'fr-FR');
+    }
+
+    public function testTransUnitWithoutSourceChildStillCreatesEntry(): void
+    {
+        $xml = <<<'XML'
+            <?xml version="1.0" encoding="UTF-8"?>
+            <xliff version="1.2" xmlns="urn:oasis:names:tc:xliff:document:1.2">
+              <file source-language="en" target-language="fr-FR" datatype="plaintext" original="messages">
+                <body>
+                  <trans-unit id="hello">
+                    <target>Bonjour</target>
+                  </trans-unit>
+                </body>
+              </file>
+            </xliff>
+            XML;
+
+        $bag = (new XliffParser())->parse(new StringSource($xml), 'fr-FR');
+        self::assertCount(1, $bag);
+        self::assertSame('Bonjour', $bag->get('hello')->content());
+    }
+
 }

@@ -63,4 +63,66 @@ final class AngularJsonRoundtripTest extends TestCase
     {
         self::assertSame('{}', (new AngularJsonSerializer())->serialize(new TranslationBag('en')));
     }
+
+    public function testParserFormat(): void
+    {
+        self::assertSame(\G\Translator\Enum\Format::ANGULAR_JSON, (new AngularJsonParser())->format());
+    }
+
+    public function testSerializerFormat(): void
+    {
+        self::assertSame(\G\Translator\Enum\Format::ANGULAR_JSON, (new AngularJsonSerializer())->format());
+    }
+
+    public function testEmptySourceReturnsEmptyBag(): void
+    {
+        $bag = (new AngularJsonParser())->parse(new StringSource(''), 'en');
+        self::assertCount(0, $bag);
+    }
+
+    public function testInvalidJsonThrows(): void
+    {
+        $this->expectException(\G\Translator\Exception\Io\ParserException::class);
+        (new AngularJsonParser())->parse(new StringSource('{not valid'), 'en');
+    }
+
+    public function testTopLevelNonObjectThrows(): void
+    {
+        $this->expectException(\G\Translator\Exception\Io\ParserException::class);
+        (new AngularJsonParser())->parse(new StringSource('"just a string"'), 'en');
+    }
+
+    public function testEmptyKeyThrows(): void
+    {
+        $this->expectException(\G\Translator\Exception\Io\ParserException::class);
+        (new AngularJsonParser())->parse(new StringSource('{"": "value"}'), 'en');
+    }
+
+    public function testNonStringLeafThrows(): void
+    {
+        $this->expectException(\G\Translator\Exception\Io\ParserException::class);
+        (new AngularJsonParser())->parse(new StringSource('{"key": 42}'), 'en');
+    }
+
+    public function testLeafConflictsWithExistingContainerThrows(): void
+    {
+        $bag = new TranslationBag('en');
+        // Create a container at 'app' first via 'app.title', then try to place a leaf at 'app'.
+        $bag->add(new TranslationEntry(id: 'app.title', content: 'Title'));
+        $bag->add(new TranslationEntry(id: 'app', content: 'X'));
+
+        $this->expectException(SerializerException::class);
+        (new AngularJsonSerializer())->serialize($bag);
+    }
+
+    public function testSerializerWrapsJsonExceptionAsSerializerException(): void
+    {
+        $bag = new TranslationBag('en');
+        // Invalid UTF-8 byte sequence makes json_encode throw under JSON_THROW_ON_ERROR.
+        $bag->add(new TranslationEntry(id: 'bad', content: "\xC3\x28"));
+
+        $this->expectException(SerializerException::class);
+        $this->expectExceptionMessage('Failed to encode translation bag as Angular JSON');
+        (new AngularJsonSerializer())->serialize($bag);
+    }
 }

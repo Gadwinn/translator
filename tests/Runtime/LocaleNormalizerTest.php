@@ -46,6 +46,7 @@ final class LocaleNormalizerTest extends TestCase
         yield 'too many subtags' => ['fr-FR-FR-FR'];
         yield 'invalid language length' => ['frenchy'];
         yield 'unknown subtag shape' => ['fr-12'];
+        yield 'single char subtag hits looksLikeRegion false' => ['fr-F'];
     }
 
     #[DataProvider('rejectProvider')]

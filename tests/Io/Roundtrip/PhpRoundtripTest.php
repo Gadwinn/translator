@@ -87,4 +87,38 @@ final class PhpRoundtripTest extends TestCase
         $bag = (new PhpParser())->parse(new StringSource('<?php return [];'), 'en');
         self::assertCount(0, $bag);
     }
+
+    public function testParserFormat(): void
+    {
+        self::assertSame(\G\Translator\Enum\Format::PHP, (new PhpParser())->format());
+    }
+
+    public function testSerializerFormat(): void
+    {
+        self::assertSame(\G\Translator\Enum\Format::PHP, (new PhpSerializer())->format());
+    }
+
+    public function testWhitespaceOnlyContentReturnsEmptyBag(): void
+    {
+        $bag = (new PhpParser())->parse(new StringSource('   '), 'en');
+        self::assertCount(0, $bag);
+    }
+
+    public function testEvaluationErrorThrows(): void
+    {
+        $this->expectException(\G\Translator\Exception\Io\ParserException::class);
+        (new PhpParser())->parse(new StringSource('<?php throw new \RuntimeException("oops");'), 'en');
+    }
+
+    public function testEmptyKeyThrows(): void
+    {
+        $this->expectException(\G\Translator\Exception\Io\ParserException::class);
+        (new PhpParser())->parse(new StringSource('<?php return ["" => "value"];'), 'en');
+    }
+
+    public function testNonStringLeafThrows(): void
+    {
+        $this->expectException(\G\Translator\Exception\Io\ParserException::class);
+        (new PhpParser())->parse(new StringSource('<?php return ["key" => 42];'), 'en');
+    }
 }

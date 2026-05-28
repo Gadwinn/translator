@@ -71,4 +71,13 @@ final class ResourceSourceTest extends TestCase
         $this->expectException(SourceNotFoundException::class);
         new ResourceSource('not a resource');
     }
+
+    public function testExtensionIsNullWhenNotProvided(): void
+    {
+        $resource = fopen('php://memory', 'r+');
+        self::assertNotFalse($resource);
+
+        $source = new ResourceSource($resource);
+        self::assertNull($source->extension());
+    }
 }

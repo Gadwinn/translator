@@ -150,6 +150,80 @@ final class DeeplProviderTest extends TestCase
         $provider->translate(self::sampleRequest());
     }
 
+    public function testEmptyBatchReturnsEmptyArray(): void
+    {
+        $http = new StubHttpClient();
+        $provider = new DeeplProvider($http, 'k');
+
+        self::assertSame([], $provider->translateBatch([]));
+    }
+
+    public function testExplicitEndpointOverridesKeyDerivedEndpoint(): void
+    {
+        $http = new StubHttpClient();
+        $http->enqueueResponse(self::successResponse(json_encode([
+            'translations' => [['text' => 'X']],
+        ], JSON_THROW_ON_ERROR)));
+        $provider = new DeeplProvider(
+            $http,
+            'aaa-bbb:fx',
+            endpoint: 'https://deepl.proxy.local/v2/translate',
+        );
+
+        $provider->translate(self::sampleRequest());
+
+        self::assertSame('https://deepl.proxy.local/v2/translate', $http->sent[0]->url);
+    }
+
+    public function testInvalidJsonBodyRaisesProviderException(): void
+    {
+        $http = new StubHttpClient();
+        $http->enqueueResponse(self::successResponse('{not json'));
+        $provider = new DeeplProvider($http, 'k');
+
+        $this->expectException(AiProviderException::class);
+        $this->expectExceptionMessage('DeepL returned a body that is not valid JSON');
+        $provider->translate(self::sampleRequest());
+    }
+
+    public function testMissingTranslationsArrayRaisesException(): void
+    {
+        $http = new StubHttpClient();
+        $http->enqueueResponse(self::successResponse('{"unrelated": "shape"}'));
+        $provider = new DeeplProvider($http, 'k');
+
+        $this->expectException(AiProviderException::class);
+        $this->expectExceptionMessage('missing the "translations" array');
+        $provider->translate(self::sampleRequest());
+    }
+
+    public function testFirstTranslationWithoutTextFieldRaisesException(): void
+    {
+        $http = new StubHttpClient();
+        $http->enqueueResponse(self::successResponse(json_encode([
+            'translations' => [['detected_source_language' => 'EN']], // no "text"
+        ], JSON_THROW_ON_ERROR)));
+        $provider = new DeeplProvider($http, 'k');
+
+        $this->expectException(AiProviderException::class);
+        $this->expectExceptionMessage('no "text" field');
+        $provider->translate(self::sampleRequest());
+    }
+
+    public function testLongErrorBodyIsTruncatedInExceptionMessage(): void
+    {
+        $http = new StubHttpClient();
+        $http->enqueueResponse(new HttpResponse(500, [], str_repeat('A', 500)));
+        $provider = new DeeplProvider($http, 'k');
+
+        try {
+            $provider->translate(self::sampleRequest());
+            self::fail('Expected AiProviderException');
+        } catch (AiProviderException $e) {
+            self::assertStringContainsString('...', $e->getMessage());
+        }
+    }
+
     public function testTranslateBatchPreservesKeys(): void
     {
         $http = new StubHttpClient();

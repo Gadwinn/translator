@@ -151,6 +151,107 @@ final class PoSerializerTest extends TestCase
         self::assertLessThan($entryPos, $headerPos);
     }
 
+    public function testSerializesCarriageReturnAsEscapedSequence(): void
+    {
+        $bag = new TranslationBag('en');
+        $bag->add(new TranslationEntry(id: 'k', content: "line1\rline2"));
+
+        $output = (new PoSerializer())->serialize($bag);
+
+        self::assertStringContainsString('msgstr "line1\\rline2"', $output);
+    }
+
+    public function testPluralEntryWithoutMsgidPluralMetadataFallsBackToId(): void
+    {
+        $bag = new TranslationBag('en');
+        $bag->add(new TranslationEntry(
+            id: 'Item',
+            content: 'Element',
+            pluralForms: [
+                PluralCategory::ONE->value   => 'Element',
+                PluralCategory::OTHER->value => 'Elements',
+            ],
+            // No 'msgid_plural' metadata → serializer falls back to id().
+        ));
+
+        $output = (new PoSerializer())->serialize($bag);
+
+        self::assertStringContainsString('msgid_plural "Item"', $output);
+    }
+
+    public function testHeaderWithoutPluralFormsUsesDefaultNplurals(): void
+    {
+        $bag = new TranslationBag('en');
+        $bag->add(new TranslationEntry(
+            id: 'One',
+            content: 'One',
+            pluralForms: [
+                PluralCategory::ONE->value   => 'One',
+                PluralCategory::OTHER->value => 'Many',
+            ],
+            metadata: [
+                'msgid_plural' => 'Many',
+                // 'po-header' present but without 'Plural-Forms' key.
+                'po-header'    => ['Language' => 'en'],
+            ],
+        ));
+
+        $output = (new PoSerializer())->serialize($bag);
+
+        // DEFAULT_NPLURALS = 2 → only msgstr[0] and msgstr[1] emitted.
+        self::assertStringContainsString('msgstr[0] "One"', $output);
+        self::assertStringContainsString('msgstr[1] "Many"', $output);
+        self::assertStringNotContainsString('msgstr[2]', $output);
+    }
+
+    public function testHeaderWithMalformedPluralFormsFallsBackToDefault(): void
+    {
+        $bag = new TranslationBag('en');
+        $bag->add(new TranslationEntry(
+            id: 'One',
+            content: 'One',
+            pluralForms: [
+                PluralCategory::ONE->value   => 'One',
+                PluralCategory::OTHER->value => 'Many',
+            ],
+            metadata: [
+                'msgid_plural' => 'Many',
+                // Plural-Forms header value with no nplurals declaration.
+                'po-header'    => ['Plural-Forms' => 'garbage no nplurals here'],
+            ],
+        ));
+
+        $output = (new PoSerializer())->serialize($bag);
+
+        self::assertStringContainsString('msgstr[0] "One"', $output);
+        self::assertStringContainsString('msgstr[1] "Many"', $output);
+    }
+
+    public function testHeaderWithOutOfTableNpluralsFallsBackToDefault(): void
+    {
+        // nplurals=0 is parseable by the regex but absent from the
+        // GETTEXT_NPLURALS_TO_CATEGORIES table (which covers 1..6).
+        $bag = new TranslationBag('en');
+        $bag->add(new TranslationEntry(
+            id: 'One',
+            content: 'One',
+            pluralForms: [
+                PluralCategory::ONE->value   => 'One',
+                PluralCategory::OTHER->value => 'Many',
+            ],
+            metadata: [
+                'msgid_plural' => 'Many',
+                'po-header'    => ['Plural-Forms' => 'nplurals=0; plural=0;'],
+            ],
+        ));
+
+        $output = (new PoSerializer())->serialize($bag);
+
+        // Falls back to DEFAULT_NPLURALS=2 → emits msgstr[0] and msgstr[1].
+        self::assertStringContainsString('msgstr[0] "One"', $output);
+        self::assertStringContainsString('msgstr[1] "Many"', $output);
+    }
+
     public function testSerializesPolishPlural3Forms(): void
     {
         $bag = new TranslationBag('pl');
