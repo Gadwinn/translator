@@ -179,15 +179,7 @@ final class LocaleNormalizer
             ));
         }
 
-        $normalized = strtolower($subtag);
-        if ($normalized === '') {
-            throw new InvalidLocaleException(sprintf(
-                'Locale "%s" produced an empty normalized language subtag.',
-                $original,
-            ));
-        }
-
-        return $normalized;
+        return strtolower($subtag);
     }
 
     private static function looksLikeScript(string $subtag): bool

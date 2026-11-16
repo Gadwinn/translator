@@ -1,6 +1,6 @@
 {
     "name": "gadwinn/translator",
-    "description": "",
+    "description": "Zero-dependency translation library: PO, XLIFF, YAML, JSON, PHP and Angular catalogs, CLDR and gettext plurals, AI translation bridges.",
     "type": "library",
     "minimum-stability": "stable",
     "license": "MIT",
