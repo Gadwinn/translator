@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, develop]
   pull_request:
 
 permissions:
@@ -31,7 +31,7 @@ jobs:
           tools: composer:v2
 
       - name: Validate composer.json
-        run: composer validate --strict
+        run: composer validate --strict --no-check-lock
 
       - name: Determine composer cache directory
         id: composer-cache

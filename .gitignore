@@ -50,5 +50,14 @@ composer.phar
 # Ignore PHPStan configuration files
 phpstan.neon
 
+# Ignore generated PHPDoc files
+.phpdoc/
+
 # Ignore temporary files with .tmp extension
 *.tmp
+
+# A library is not locked
+composer.lock
+
+# Generated API documentation (composer gen-docs)
+/docs/phpdoc/
