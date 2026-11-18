@@ -83,6 +83,16 @@ final class GettextExpressionPluralResolver implements PluralResolverInterface
     private array $registry = [];
 
     /**
+     * Parsed `Plural-Forms` header values, see {@see resolveHeader()}.
+     *
+     * @var array<string, array{ast: ExpressionNode, categories: non-empty-list<PluralCategory>}>
+     */
+    private array $headers = [];
+
+    private const string NPLURALS_PATTERN = '/nplurals\s*=\s*(\d+)/';
+    private const string PLURAL_PATTERN = '/(?<![a-z])plural\s*=\s*([^;]+)/';
+
+    /**
      * Registers (or replaces) the plural expression for a locale.
      *
      * The expression is parsed and validated up front; malformed
@@ -140,18 +150,80 @@ final class GettextExpressionPluralResolver implements PluralResolverInterface
             ));
         }
 
-        $entry = $this->registry[$canonical];
-        $formIndex = $entry['ast']->evaluate($count);
+        return $this->categoryAt($this->registry[$canonical], $count, 'locale "' . $canonical . '"');
+    }
 
-        if ($formIndex < 0 || $formIndex >= count($entry['categories'])) {
+    /**
+     * Resolves a count with the value of a PO `Plural-Forms` header
+     * (`nplurals=N; plural=EXPR;`), whatever the locale.
+     *
+     * A PO parser stores `msgstr[i]` under the i-th category of the
+     * same nplurals table, so evaluating the file's own expression
+     * always selects the form the translator wrote, including for
+     * languages whose order does not follow the CLDR one (Slovenian,
+     * Latvian...). Parsed headers are cached by value.
+     *
+     * @throws PluralResolutionException When the header is malformed,
+     *         nplurals is out of range or the expression yields an
+     *         out-of-range form index.
+     */
+    public function resolveHeader(string $pluralForms, int $count): PluralCategory
+    {
+        if (!array_key_exists($pluralForms, $this->headers)) {
+            $this->headers[$pluralForms] = $this->parseHeader($pluralForms);
+        }
+
+        return $this->categoryAt($this->headers[$pluralForms], $count, 'Plural-Forms "' . $pluralForms . '"');
+    }
+
+    /**
+     * @return array{ast: ExpressionNode, categories: non-empty-list<PluralCategory>}
+     *
+     * @throws PluralResolutionException
+     */
+    private function parseHeader(string $pluralForms): array
+    {
+        if (
+            preg_match(self::NPLURALS_PATTERN, $pluralForms, $nplurals) !== 1
+            || preg_match(self::PLURAL_PATTERN, $pluralForms, $plural) !== 1
+        ) {
+            throw new PluralResolutionException(sprintf('Malformed Plural-Forms header "%s".', $pluralForms));
+        }
+
+        $count = (int) $nplurals[1];
+        if (!isset(self::NPLURALS_TO_CATEGORIES[$count])) {
             throw new PluralResolutionException(sprintf(
-                'Gettext plural expression for locale "%s" returned out-of-range form index %d for count %d.',
-                $canonical,
+                'Unsupported nplurals value %d in Plural-Forms header "%s"; expected 1..%d.',
+                $count,
+                $pluralForms,
+                self::MAX_NPLURALS,
+            ));
+        }
+
+        return [
+            'ast' => ExpressionParser::parse($plural[1]),
+            'categories' => self::NPLURALS_TO_CATEGORIES[$count],
+        ];
+    }
+
+    /**
+     * @param array{ast: ExpressionNode, categories: non-empty-list<PluralCategory>} $rule
+     *
+     * @throws PluralResolutionException When the form index is out of range.
+     */
+    private function categoryAt(array $rule, int $count, string $source): PluralCategory
+    {
+        $formIndex = $rule['ast']->evaluate($count);
+
+        if ($formIndex < 0 || $formIndex >= count($rule['categories'])) {
+            throw new PluralResolutionException(sprintf(
+                'Gettext plural expression for %s returned out-of-range form index %d for count %d.',
+                $source,
                 $formIndex,
                 $count,
             ));
         }
 
-        return $entry['categories'][$formIndex];
+        return $rule['categories'][$formIndex];
     }
 }

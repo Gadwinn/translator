@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace G\Translator\Bridge\Ai\Provider;
 
+use SensitiveParameter;
 use G\Translator\Bridge\Ai\AiProviderInterface;
 use G\Translator\Bridge\Ai\Enum\TranslationQuality;
 use G\Translator\Bridge\Ai\Request\TranslationRequest;
@@ -78,6 +79,7 @@ final class OpenAiProvider implements AiProviderInterface
      */
     public function __construct(
         private readonly HttpClientInterface $http,
+        #[SensitiveParameter]
         private readonly string $apiKey,
         private readonly ?string $endpoint = null,
     ) {

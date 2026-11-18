@@ -7,6 +7,7 @@ namespace G\Translator\Runtime;
 use G\Translator\Bag\TranslationEntryInterface;
 use G\Translator\Enum\PluralCategory;
 use G\Translator\Exception\Runtime\MissingTranslationException;
+use G\Translator\Exception\Runtime\PluralResolutionException;
 use G\Translator\Runtime\Placeholder\DefaultPlaceholderResolver;
 use G\Translator\Runtime\Placeholder\PlaceholderResolverInterface;
 use G\Translator\Runtime\Plural\CldrPluralResolver;
@@ -49,9 +50,16 @@ final class Translator implements TranslatorInterface
      */
     private const string DEFAULT_DOMAIN = 'messages';
 
+    /** Entry metadata written by the PO parser, see {@see poHeaderCategory()}. */
+    private const string PO_HEADER_METADATA = 'po-header';
+    private const string PO_PLURAL_FORMS = 'Plural-Forms';
+
     private bool $strict = false;
 
     private LocaleFallbackInterface $fallback;
+
+    /** Evaluates the `Plural-Forms` headers of PO entries (parsed once each). */
+    private readonly GettextExpressionPluralResolver $poHeaderRules;
 
     public function __construct(
         private readonly BagRegistryInterface $registry,
@@ -63,6 +71,7 @@ final class Translator implements TranslatorInterface
         private readonly PlaceholderResolverInterface $placeholderResolver = new DefaultPlaceholderResolver(),
     ) {
         $this->fallback = $fallback ?? new LocaleFallback();
+        $this->poHeaderRules = new GettextExpressionPluralResolver();
     }
 
     /**
@@ -109,8 +118,8 @@ final class Translator implements TranslatorInterface
             ? LocaleNormalizer::normalize($locale)
             : $this->fallback->primary();
 
-        $entry = $this->findEntry($id, $domain, $context, $effectiveLocale);
-        $form = $entry !== null ? $this->selectPluralForm($entry, $count, $effectiveLocale) : null;
+        $found = $this->locateEntry($id, $domain, $context, $effectiveLocale);
+        $form = $found !== null ? $this->selectPluralForm($found[0], $count, $found[1]) : null;
 
         if ($form !== null && $form !== '') {
             $params = $this->injectCountIfNeeded($form, $count, $params);
@@ -170,6 +179,28 @@ final class Translator implements TranslatorInterface
         ?string $context,
         ?string $locale,
     ): ?TranslationEntryInterface {
+        return $this->locateEntry($id, $domain, $context, $locale)[0] ?? null;
+    }
+
+    /**
+     * Same walk as {@see findEntry()}, also returning the locale of the bag
+     * the entry was found in: a plural form must be selected with the rules
+     * of that locale, not those of the requested one (an English fallback
+     * entry has no "one" form for 0, which French puts in "one").
+     *
+     * @param non-empty-string $id
+     * @param non-empty-string $domain
+     * @param non-empty-string|null $context
+     * @param non-empty-string|null $locale
+     *
+     * @return array{0: TranslationEntryInterface, 1: non-empty-string}|null
+     */
+    private function locateEntry(
+        string $id,
+        string $domain,
+        ?string $context,
+        ?string $locale,
+    ): ?array {
         $chain = $this->resolveChain($locale);
 
         foreach ($chain as $candidate) {
@@ -179,7 +210,7 @@ final class Translator implements TranslatorInterface
             }
             $entry = $bag->find($id, $domain, $context);
             if ($entry !== null) {
-                return $entry;
+                return [$entry, $candidate];
             }
         }
 
@@ -216,7 +247,7 @@ final class Translator implements TranslatorInterface
             return $entry->content() !== '' ? $entry->content() : null;
         }
 
-        $category = $this->pluralResolver->resolve($count, $locale);
+        $category = $this->poHeaderCategory($entry, $count) ?? $this->pluralResolver->resolve($count, $locale);
         $key = $category->value;
         if (isset($forms[$key]) && $forms[$key] !== '') {
             return $forms[$key];
@@ -228,6 +259,28 @@ final class Translator implements TranslatorInterface
         }
 
         return null;
+    }
+
+    /**
+     * The category given by the `Plural-Forms` header of the PO file the
+     * entry comes from, when it carries one: the forms of that file are
+     * indexed by its own expression, which is the only reliable mapping
+     * for languages whose gettext order differs from the CLDR one.
+     * Null (use the configured resolver) without a usable header.
+     */
+    private function poHeaderCategory(TranslationEntryInterface $entry, int $count): ?PluralCategory
+    {
+        $header = $entry->metadata()[self::PO_HEADER_METADATA] ?? null;
+        $pluralForms = is_array($header) ? ($header[self::PO_PLURAL_FORMS] ?? null) : null;
+        if (!is_string($pluralForms) || $pluralForms === '') {
+            return null;
+        }
+
+        try {
+            return $this->poHeaderRules->resolveHeader($pluralForms, $count);
+        } catch (PluralResolutionException) {
+            return null;
+        }
     }
 
     /**

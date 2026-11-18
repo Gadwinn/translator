@@ -95,6 +95,13 @@ echo $translator->plural(
 // → "5 000 pommes"
 ```
 
+The form is chosen with the plural rules of the locale the translation was found in (an
+English fallback entry follows the English rules). For an entry read from a PO file, the
+`Plural-Forms` header of that file decides: its forms are numbered by its own expression, so
+every language is handled correctly (Slovenian, Latvian...) without registering anything.
+Other entries use the CLDR rules, or an expression registered with
+`GettextExpressionPluralResolver::register()`.
+
 ### 3. Context (`msgctxt`) and domains
 
 ```php
@@ -119,6 +126,12 @@ $fallback->setAutoParent(true);          // also try pl, en-GB → en, etc.
 // Resolution chain becomes: pl-PL → pl → en-GB → en
 $translator = new Translator($registry, $fallback);
 ```
+
+The locale set with `setLocale()` is kept by the translator. In a long-running worker
+(FrankenPHP, RoadRunner...) where one translator serves many requests, set it again at the
+start of each request (from the URL, a cookie or `Accept-Language`), or reset it after each
+request (`gadwinn/framework`: `config/reset.php`); otherwise a request inherits the locale of
+the previous one.
 
 ### 5. Strict mode for CI / development
 
