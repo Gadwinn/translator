@@ -184,12 +184,12 @@ final class StackEngineTest extends TestCase
             priority: 10,
         ));
         $engine->add(new StackedSource(
-            new StringSource('{"greeting":"Bonjour, Willy!"}', extension: 'json'),
+            new StringSource('{"greeting":"Bonjour, Alice!"}', extension: 'json'),
             priority: 20,
         ));
 
         $bag = $engine->resolve('fr-FR', MergeStrategy::REPLACE);
-        self::assertSame('Bonjour, Willy!', $bag->get('greeting')->content());
+        self::assertSame('Bonjour, Alice!', $bag->get('greeting')->content());
         self::assertSame('Acme', $bag->get('brand')->content());
     }
 

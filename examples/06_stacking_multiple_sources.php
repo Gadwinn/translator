@@ -31,7 +31,7 @@ $engine->add(new StackedSource(
     priority: 10,
 ));
 $engine->add(new StackedSource(
-    new StringSource('{"greeting":"Bonjour, Willy!"}', extension: 'json'),
+    new StringSource('{"greeting":"Bonjour, Alice!"}', extension: 'json'),
     priority: 20,
 ));
 
@@ -39,5 +39,5 @@ $engine->add(new StackedSource(
 // Pick REPLACE explicitly when overrides are intentional.
 $mergedBag = $engine->resolve('fr-FR', MergeStrategy::REPLACE);
 
-assert_same('Bonjour, Willy!', $mergedBag->get('greeting')->content(), 'priority 20 wins greeting');
+assert_same('Bonjour, Alice!', $mergedBag->get('greeting')->content(), 'priority 20 wins greeting');
 assert_same('Acme',            $mergedBag->get('brand')->content(),    'priority 10 wins brand');

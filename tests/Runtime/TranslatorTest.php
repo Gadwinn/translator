@@ -60,8 +60,8 @@ final class TranslatorTest extends TestCase
     public function testTransHydratesPlaceholders(): void
     {
         self::assertSame(
-            'Bonjour Willy',
-            $this->translator->trans('Hello %name%', params: ['name' => 'Willy']),
+            'Bonjour Alice',
+            $this->translator->trans('Hello %name%', params: ['name' => 'Alice']),
         );
     }
 

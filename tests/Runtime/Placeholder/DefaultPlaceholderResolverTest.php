@@ -32,8 +32,8 @@ final class DefaultPlaceholderResolverTest extends TestCase
 
     public function testPercentNamedSubstitution(): void
     {
-        $out = $this->resolver->resolve('Hello %name%', ['name' => 'Willy']);
-        self::assertSame('Hello Willy', $out);
+        $out = $this->resolver->resolve('Hello %name%', ['name' => 'Alice']);
+        self::assertSame('Hello Alice', $out);
     }
 
     public function testPercentNamedEscapeCollapsesAfterSubstitution(): void
@@ -50,8 +50,8 @@ final class DefaultPlaceholderResolverTest extends TestCase
 
     public function testBraceNamedSubstitution(): void
     {
-        $out = $this->resolver->resolve('Hi {name}', ['name' => 'Willy']);
-        self::assertSame('Hi Willy', $out);
+        $out = $this->resolver->resolve('Hi {name}', ['name' => 'Alice']);
+        self::assertSame('Hi Alice', $out);
     }
 
     public function testBraceNamedEscapeCollapsesAfterSubstitution(): void
@@ -62,14 +62,14 @@ final class DefaultPlaceholderResolverTest extends TestCase
 
     public function testSprintfSequentialPositional(): void
     {
-        $out = $this->resolver->resolve('%s likes %s', ['Willy', 'apples']);
-        self::assertSame('Willy likes apples', $out);
+        $out = $this->resolver->resolve('%s likes %s', ['Alice', 'apples']);
+        self::assertSame('Alice likes apples', $out);
     }
 
     public function testSprintfIndexedPositional(): void
     {
-        $out = $this->resolver->resolve('%2$s likes %1$s', ['apples', 'Willy']);
-        self::assertSame('Willy likes apples', $out);
+        $out = $this->resolver->resolve('%2$s likes %1$s', ['apples', 'Alice']);
+        self::assertSame('Alice likes apples', $out);
     }
 
     public function testSprintfPercentEscape(): void
@@ -83,8 +83,8 @@ final class DefaultPlaceholderResolverTest extends TestCase
         // Mixing families is undefined behavior per the contract, but
         // the resolver MUST behave deterministically: sprintf wins.
         // `%name%` is left untouched because the active family is sprintf.
-        $out = $this->resolver->resolve('Hello %s, today %name%', ['Willy']);
-        self::assertSame('Hello Willy, today %name%', $out);
+        $out = $this->resolver->resolve('Hello %s, today %name%', ['Alice']);
+        self::assertSame('Hello Alice, today %name%', $out);
     }
 
     public function testIntScalarIsAccepted(): void
@@ -139,14 +139,14 @@ $this->resolver->resolve('Hello %name%', ['name' => new \stdClass()]);
     public function testIdentifiersOutsidePlaceholderSyntaxAreNotTouched(): void
     {
         // `name` alone (no surrounding `%` or `{}`) is not a placeholder.
-        $out = $this->resolver->resolve('name is name', ['name' => 'Willy']);
+        $out = $this->resolver->resolve('name is name', ['name' => 'Alice']);
         self::assertSame('name is name', $out);
     }
 
     public function testSprintfMissingParamLeavesTokenUntouched(): void
     {
-        $out = $this->resolver->resolve('%s and %s', ['Willy']);
-        self::assertSame('Willy and %s', $out);
+        $out = $this->resolver->resolve('%s and %s', ['Alice']);
+        self::assertSame('Alice and %s', $out);
     }
 
     public function testBraceNamedUnmatchedIsLeftUntouched(): void

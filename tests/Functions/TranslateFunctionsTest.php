@@ -56,14 +56,14 @@ final class TranslateFunctionsTest extends TestCase
 
     public function testUnderscoreRoutesToTrans(): void
     {
-        self::assertSame('trans:Hello %name%', __('Hello %name%', ['name' => 'Willy']));
+        self::assertSame('trans:Hello %name%', __('Hello %name%', ['name' => 'Alice']));
 
         $call = $this->stub->calls[0];
         self::assertSame('trans', $call['kind']);
         self::assertSame('Hello %name%', $call['id']);
         self::assertSame('messages', $call['domain']);
         self::assertNull($call['context']);
-        self::assertSame(['name' => 'Willy'], $call['params']);
+        self::assertSame(['name' => 'Alice'], $call['params']);
     }
 
     public function testDRoutesToTransWithDomain(): void
