@@ -41,7 +41,7 @@ $translator->setLocale('fr-FR');
 TranslatorRegistry::setDefault($translator);
 
 // Anywhere in the app.
-assert_same('Bonjour Willy',     __('Hello %name%',                   ['name' => 'Willy']), '__()');
+assert_same('Bonjour Alice',     __('Hello %name%',                   ['name' => 'Alice']), '__()');
 assert_same('Bienvenue admin',   __d('admin', 'Welcome'),                                   '__d()');
 assert_same('5 pommes',          __n('One apple', '{count} apples', 5),                     '__n()');
 assert_same('Publier',           __p('verb',   'Post'),                                     '__p()');
@@ -57,7 +57,7 @@ TranslatorRegistry::use('admin');
 assert_same('Bienvenue admin', __d('admin', 'Welcome'), 'scope routes to the named translator');
 
 TranslatorRegistry::use(null);
-assert_same('Bonjour Willy', __('Hello %name%', ['name' => 'Willy']), 'null scope reverts to default');
+assert_same('Bonjour Alice', __('Hello %name%', ['name' => 'Alice']), 'null scope reverts to default');
 
 // Clean up to keep test isolation if this file is required twice.
 TranslatorRegistry::reset();

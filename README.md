@@ -75,8 +75,8 @@ $registry->register('fr-FR', $bag);
 $translator = new Translator($registry);
 $translator->setLocale('fr-FR');
 
-echo $translator->trans('Hello %name%', params: ['name' => 'Willy']);
-// → "Bonjour Willy"
+echo $translator->trans('Hello %name%', params: ['name' => 'Alice']);
+// → "Bonjour Alice"
 ```
 
 ### 2. Plural translation with automatic `{count}` injection
@@ -214,8 +214,8 @@ use G\Translator\Functions\TranslatorRegistry;
 TranslatorRegistry::setDefault($translator);
 
 // Anywhere in the app
-echo __('Hello %name%',                 ['name' => 'Willy']);
-echo __d('admin', 'Welcome %name%',     ['name' => 'Willy']);
+echo __('Hello %name%',                 ['name' => 'Alice']);
+echo __d('admin', 'Welcome %name%',     ['name' => 'Alice']);
 echo __n('One apple', '{count} apples', 5);
 echo __p('verb',   'Post');
 echo __dp('admin', 'noun', 'Post');

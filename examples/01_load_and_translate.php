@@ -26,6 +26,6 @@ $registry->register('fr-FR', $bag);
 $translator = new Translator($registry);
 $translator->setLocale('fr-FR');
 
-$result = $translator->trans('Hello %name%', params: ['name' => 'Willy']);
-// → "Bonjour Willy"
-assert_same('Bonjour Willy', $result, 'simple placeholder substitution');
+$result = $translator->trans('Hello %name%', params: ['name' => 'Alice']);
+// → "Bonjour Alice"
+assert_same('Bonjour Alice', $result, 'simple placeholder substitution');
