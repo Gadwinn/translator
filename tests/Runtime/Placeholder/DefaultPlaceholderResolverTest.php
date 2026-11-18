@@ -154,4 +154,17 @@ $this->resolver->resolve('Hello %name%', ['name' => new \stdClass()]);
         $out = $this->resolver->resolve('Hello {name}', []);
         self::assertSame('Hello {name}', $out);
     }
+
+    public function testEscapesInsideSubstitutedValuesAreKept(): void
+    {
+        self::assertSame('Save 50%% now (100%)', $this->resolver->resolve('Save %rate% now (100%%)', ['rate' => '50%%']));
+        self::assertSame('Code {{x}} in {braces}', $this->resolver->resolve('Code {code} in {{braces}}', ['code' => '{{x}}']));
+        self::assertSame('50%% of 100%', $this->resolver->resolve('%s of 100%%', ['50%%']));
+    }
+
+    public function testSprintfEscapeIsNotReadAsAToken(): void
+    {
+        // "%%s" is a literal "%" followed by "s", as with sprintf().
+        self::assertSame('100%s and Alice', $this->resolver->resolve('100%%s and %s', ['Alice']));
+    }
 }

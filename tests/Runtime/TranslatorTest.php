@@ -244,6 +244,24 @@ final class TranslatorTest extends TestCase
         self::assertSame('simple', $translator->trans('plain'));
     }
 
+    public function testPluralUsesTheRulesOfTheLocaleTheEntryWasFoundIn(): void
+    {
+        // Only English knows this message: French puts 0 in "one", English in "other".
+        $english = $this->registry->find('en');
+        self::assertNotNull($english);
+        $english->add(new TranslationEntry(
+            id: 'One file',
+            content: 'One file',
+            pluralForms: [
+                PluralCategory::ONE->value   => 'One file',
+                PluralCategory::OTHER->value => '{count} files',
+            ],
+        ));
+
+        self::assertSame('0 files', $this->translator->plural('One file', '{count} files', 0));
+        self::assertSame('One file', $this->translator->plural('One file', '{count} files', 1));
+    }
+
     public function testPluralUsesContentWhenNoFormsAreDefined(): void
     {
         // 'plain' entry has content='simple' and no plural forms

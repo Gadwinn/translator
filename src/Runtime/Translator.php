@@ -109,8 +109,8 @@ final class Translator implements TranslatorInterface
             ? LocaleNormalizer::normalize($locale)
             : $this->fallback->primary();
 
-        $entry = $this->findEntry($id, $domain, $context, $effectiveLocale);
-        $form = $entry !== null ? $this->selectPluralForm($entry, $count, $effectiveLocale) : null;
+        $found = $this->locateEntry($id, $domain, $context, $effectiveLocale);
+        $form = $found !== null ? $this->selectPluralForm($found[0], $count, $found[1]) : null;
 
         if ($form !== null && $form !== '') {
             $params = $this->injectCountIfNeeded($form, $count, $params);
@@ -170,6 +170,28 @@ final class Translator implements TranslatorInterface
         ?string $context,
         ?string $locale,
     ): ?TranslationEntryInterface {
+        return $this->locateEntry($id, $domain, $context, $locale)[0] ?? null;
+    }
+
+    /**
+     * Same walk as {@see findEntry()}, also returning the locale of the bag
+     * the entry was found in: a plural form must be selected with the rules
+     * of that locale, not those of the requested one (an English fallback
+     * entry has no "one" form for 0, which French puts in "one").
+     *
+     * @param non-empty-string $id
+     * @param non-empty-string $domain
+     * @param non-empty-string|null $context
+     * @param non-empty-string|null $locale
+     *
+     * @return array{0: TranslationEntryInterface, 1: non-empty-string}|null
+     */
+    private function locateEntry(
+        string $id,
+        string $domain,
+        ?string $context,
+        ?string $locale,
+    ): ?array {
         $chain = $this->resolveChain($locale);
 
         foreach ($chain as $candidate) {
@@ -179,7 +201,7 @@ final class Translator implements TranslatorInterface
             }
             $entry = $bag->find($id, $domain, $context);
             if ($entry !== null) {
-                return $entry;
+                return [$entry, $candidate];
             }
         }
 

@@ -39,12 +39,11 @@ use Stringable;
  *
  * ## Escape semantics
  *
- * - Percent-based families collapse `%%` → `%` AFTER substitution.
- *   This ordering matters: a user-supplied value containing `%`
- *   cannot accidentally produce a token that re-enters the
- *   substitution pass.
- * - Brace-named family collapses `{{` → `{` and `}}` → `}` AFTER
- *   substitution.
+ * - Escapes are resolved in the same single pass as the tokens:
+ *   percent-based families turn `%%` into `%`, the brace-named
+ *   family turns `{{` into `{` and `}}` into `}`. A substituted value
+ *   is never scanned again, so a value containing `%`, `%%` or `{{`
+ *   is inserted exactly as given and cannot produce a new token.
  *
  * ## Strict value policy
  *
@@ -66,7 +65,7 @@ final class DefaultPlaceholderResolver implements PlaceholderResolverInterface
      *      identifier letter happens to be a conversion char (e.g.,
      *      the `%c` inside `%count%`, or the `%s` inside `%subject%`).
      */
-    private const string SPRINTF_TOKEN_REGEX = '/%(?:(\d+)\$)?([+\-]?\d*(?:\.\d+)?)?([sdfxXobeucg])(?!\w*%)/';
+    private const string SPRINTF_TOKEN_REGEX = '/%%|%(?:(\d+)\$)?([+\-]?\d*(?:\.\d+)?)?([sdfxXobeucg])(?!\w*%)/';
 
     /**
      * @var non-empty-string Regex matching `%name%` placeholders OR
@@ -144,9 +143,15 @@ final class DefaultPlaceholderResolver implements PlaceholderResolverInterface
         $substituted = preg_replace_callback(
             self::SPRINTF_TOKEN_REGEX,
             function (array $match) use ($params, &$autoIndex): string {
-                $explicitIndex = $match[1];
-                $flags = $match[2];
-                $conversion = $match[3];
+                // Escapes are resolved here, never after the substitution:
+                // a "%%" inside a substituted value must stay as it is.
+                if ($match[0] === '%%') {
+                    return '%';
+                }
+
+                $explicitIndex = $match[1] ?? '';
+                $flags = $match[2] ?? '';
+                $conversion = $match[3] ?? '';
 
                 if ($explicitIndex !== '') {
                     $index = (int) $explicitIndex - 1;
@@ -170,7 +175,7 @@ final class DefaultPlaceholderResolver implements PlaceholderResolverInterface
             return $message;
         }
 
-        return str_replace('%%', '%', $substituted);
+        return $substituted;
     }
 
     /**
@@ -182,7 +187,7 @@ final class DefaultPlaceholderResolver implements PlaceholderResolverInterface
             self::PERCENT_NAMED_REGEX,
             function (array $match) use ($params): string {
                 if ($match[0] === '%%') {
-                    return '%%';
+                    return '%';
                 }
 
                 $name = $match[1] ?? '';
@@ -199,7 +204,7 @@ final class DefaultPlaceholderResolver implements PlaceholderResolverInterface
             return $message;
         }
 
-        return str_replace('%%', '%', $substituted);
+        return $substituted;
     }
 
     /**
@@ -211,7 +216,7 @@ final class DefaultPlaceholderResolver implements PlaceholderResolverInterface
             self::BRACE_NAMED_REGEX,
             function (array $match) use ($params): string {
                 if ($match[0] === '{{' || $match[0] === '}}') {
-                    return $match[0];
+                    return $match[0][0];
                 }
 
                 $name = $match[1] ?? '';
@@ -228,7 +233,7 @@ final class DefaultPlaceholderResolver implements PlaceholderResolverInterface
             return $message;
         }
 
-        return strtr($substituted, ['{{' => '{', '}}' => '}']);
+        return $substituted;
     }
 
     private function coerceToString(mixed $value, string $token): string
