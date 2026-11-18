@@ -8,6 +8,8 @@ use G\Translator\Bag\TranslationBag;
 use G\Translator\Bag\TranslationEntry;
 use G\Translator\Enum\PluralCategory;
 use G\Translator\Exception\Runtime\MissingTranslationException;
+use G\Translator\Io\Parser\PoParser;
+use G\Translator\Io\Source\StringSource;
 use G\Translator\Runtime\BagRegistry;
 use G\Translator\Runtime\LocaleFallback;
 use G\Translator\Runtime\Translator;
@@ -260,6 +262,33 @@ final class TranslatorTest extends TestCase
 
         self::assertSame('0 files', $this->translator->plural('One file', '{count} files', 0));
         self::assertSame('One file', $this->translator->plural('One file', '{count} files', 1));
+    }
+
+    public function testPluralFollowsThePluralFormsHeaderOfAPoFile(): void
+    {
+        // Slovenian has four forms in gettext order one, two, few, other;
+        // the CLDR rules alone would pick the wrong msgstr for 2.
+        $po = <<<'PO'
+            msgid ""
+            msgstr ""
+            "Plural-Forms: nplurals=4; plural=(n%100==1 ? 0 : n%100==2 ? 1 : n%100==3 || n%100==4 ? 2 : 3);\n"
+
+            msgid "One file"
+            msgid_plural "%count% files"
+            msgstr[0] "%count% datoteka"
+            msgstr[1] "%count% datoteki"
+            msgstr[2] "%count% datoteke"
+            msgstr[3] "%count% datotek"
+            PO;
+
+        $registry = new BagRegistry();
+        $registry->register('sl', (new PoParser())->parse(new StringSource($po, extension: 'po'), 'sl'));
+        $translator = new Translator($registry, new LocaleFallback('sl'));
+
+        self::assertSame('1 datoteka', $translator->plural('One file', '%count% files', 1));
+        self::assertSame('2 datoteki', $translator->plural('One file', '%count% files', 2));
+        self::assertSame('3 datoteke', $translator->plural('One file', '%count% files', 3));
+        self::assertSame('5 datotek', $translator->plural('One file', '%count% files', 5));
     }
 
     public function testPluralUsesContentWhenNoFormsAreDefined(): void
