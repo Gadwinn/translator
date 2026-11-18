@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace G\Translator\Bridge\Ai\Provider;
 
+use SensitiveParameter;
 use G\Translator\Bridge\Ai\AiProviderInterface;
 use G\Translator\Bridge\Ai\Request\TranslationRequest;
 use G\Translator\Bridge\Ai\Result\TranslationResult;
@@ -93,6 +94,7 @@ final class DeeplProvider implements AiProviderInterface
      */
     public function __construct(
         private readonly HttpClientInterface $http,
+        #[SensitiveParameter]
         private readonly string $apiKey,
         ?string $endpoint = null,
     ) {
