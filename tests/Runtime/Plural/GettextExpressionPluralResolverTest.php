@@ -212,4 +212,22 @@ final class GettextExpressionPluralResolverTest extends TestCase
         $this->expectException(PluralResolutionException::class);
         $resolver->resolve(5, 'en');
     }
+    public function testResolveHeaderEvaluatesAPluralFormsHeader(): void
+    {
+        $resolver = new GettextExpressionPluralResolver();
+        $header = 'nplurals=4; plural=(n%100==1 ? 0 : n%100==2 ? 1 : n%100==3 || n%100==4 ? 2 : 3);';
+
+        // Slovenian: the 4-form table names index 1 "few" and the PO parser stores msgstr[1] there.
+        self::assertSame(PluralCategory::ONE, $resolver->resolveHeader($header, 101));
+        self::assertSame(PluralCategory::FEW, $resolver->resolveHeader($header, 2));
+        self::assertSame(PluralCategory::MANY, $resolver->resolveHeader($header, 3));
+        self::assertSame(PluralCategory::OTHER, $resolver->resolveHeader($header, 5));
+    }
+
+    public function testResolveHeaderRejectsAMalformedHeader(): void
+    {
+        $this->expectException(PluralResolutionException::class);
+
+        (new GettextExpressionPluralResolver())->resolveHeader('plural=n != 1;', 1);
+    }
 }
