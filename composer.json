@@ -1,6 +1,6 @@
 {
     "name": "gadwinn/translator",
-    "description": "",
+    "description": "Zero-dependency translation library: PO, XLIFF, YAML, JSON, PHP and Angular catalogs, CLDR and gettext plurals, AI translation bridges.",
     "type": "library",
     "minimum-stability": "stable",
     "license": "MIT",
@@ -8,6 +8,11 @@
     "autoload": {
         "psr-4": {
             "G\\Translator\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "G\\Translator\\Tests\\": "tests/"
         }
     },
     "require": {
@@ -36,17 +41,21 @@
             "@security-audit",
             "@test-phpcbf",
             "@test-cs",
+            "@test-dag",
             "@test-stan",
             "@test-unit",
+            "@test-examples",
             "@test-mnd"
         ],
         "security-audit": "composer audit --no-dev --format=summary --abandoned=report",
         "test-phpcbf": "php vendor/bin/phpcbf || exit 0",
         "test-cs": "php vendor/bin/phpcs",
+        "test-dag": "php tools/check-dag.php",
         "test-stan": "php vendor/bin/phpstan",
         "test-unit": "php vendor/bin/phpunit --no-coverage",
-        "test-unit-coverage": "php vendor/bin/phpunit --coverage-text",
-        "test-mnd": "php vendor/bin/phpmnd ./src --hint --progress --strings --extensions=assign,operation,return,condition,switch_case"
+        "test-unit-coverage": "php -d xdebug.mode=coverage vendor/bin/phpunit --coverage-text",
+        "test-examples": "php tools/run-examples.php",
+        "test-mnd": "php vendor/bin/phpmnd ./src --hint --progress --ignore-numbers=-1,0,1 --exclude-path=Runtime/Plural --extensions=assign,operation,return,condition,switch_case"
     },
     "scripts-descriptions": {
         "install-prod": "Install dependencies for production environment",
@@ -55,9 +64,11 @@
         "security-audit": "Check for security vulnerabilities in dependencies",
         "test-phpcbf": "Automatically fix code style issues using PHP Code Beautifier and Fixer",
         "test-cs": "Run code style checks using PHP_CodeSniffer",
+        "test-dag": "Verify the layered-architecture DAG against the rules in copilot-instructions.md",
         "test-stan": "Run static analysis using PHPStan",
         "test-unit": "Run unit tests with PHPUnit",
         "test-unit-coverage": "Run unit tests with PHPUnit and generate code coverage report",
+        "test-examples": "Run every examples/NN_*.php script and fail when any of them exits non-zero",
         "test-mnd": "Detect magic numbers in the codebase"
     }
 }

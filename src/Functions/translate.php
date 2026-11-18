@@ -22,7 +22,7 @@
  *     use G\Translator\Functions\TranslatorRegistry;
  *
  *     TranslatorRegistry::setDefault($translator);
- *     echo __('Hello %name%', ['name' => 'Willy']);
+ *     echo __('Hello %name%', ['name' => 'Alice']);
  *
  * The procedural API is a thin convenience layer; the
  * object-oriented API (`$translator->trans(...)`) remains the
