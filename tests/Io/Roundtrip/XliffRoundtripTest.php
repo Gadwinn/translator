@@ -321,4 +321,32 @@ final class XliffRoundtripTest extends TestCase
         $this->expectException(SerializerException::class);
         (new XliffSerializer())->serialize($bag);
     }
+
+    public function testSourceLanguageIsKeptOnRoundtrip(): void
+    {
+        $xml12 = str_replace('source-language="en"', 'source-language="fr-FR"', self::XLIFF_12);
+        $xml20 = str_replace('srcLang="en"', 'srcLang="de"', self::XLIFF_20);
+
+        $out12 = (new XliffSerializer())->serialize((new XliffParser())->parse(new StringSource($xml12), 'es'));
+        $out20 = (new XliffSerializer())->serialize((new XliffParser())->parse(new StringSource($xml20), 'es'));
+
+        self::assertStringContainsString('source-language="fr-FR"', $out12);
+        self::assertStringContainsString('srcLang="de"', $out20);
+    }
+
+    public function testSourceLanguageGivenToTheSerializerWins(): void
+    {
+        $bag = (new XliffParser())->parse(new StringSource(self::XLIFF_12), 'fr-FR');
+
+        $out = (new XliffSerializer(sourceLocale: 'it'))->serialize($bag);
+        self::assertStringContainsString('source-language="it"', $out);
+    }
+
+    public function testSourceLanguageDefaultsToEnglish(): void
+    {
+        $bag = new TranslationBag('fr');
+        $bag->add(new TranslationEntry(id: 'hello', content: 'Bonjour'));
+
+        self::assertStringContainsString('source-language="en"', (new XliffSerializer())->serialize($bag));
+    }
 }
