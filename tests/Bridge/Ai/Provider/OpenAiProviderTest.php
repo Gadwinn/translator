@@ -312,6 +312,21 @@ final class OpenAiProviderTest extends TestCase
         self::assertSame([42, 'k'], array_keys($results));
     }
 
+    public function testTruncatedAnswerRaisesProviderException(): void
+    {
+        $http = new StubHttpClient();
+        $http->enqueueResponse(self::successResponse((string) json_encode([
+            'choices' => [[
+                'finish_reason' => 'length',
+                'message' => ['role' => 'assistant', 'content' => '{"translatedText": "Bon'],
+            ]],
+        ])));
+
+        $this->expectException(AiProviderException::class);
+        $this->expectExceptionMessage('ran out of tokens');
+        (new OpenAiProvider($http, 'k'))->translate(self::sampleRequest());
+    }
+
     private static function sampleRequest(): TranslationRequest
     {
         return new TranslationRequest(

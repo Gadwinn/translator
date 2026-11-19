@@ -86,7 +86,7 @@ final class ClaudeProviderTest extends TestCase
         self::assertSame('sk-secret', $sent->headers['x-api-key']);
         self::assertSame('2023-06-01', $sent->headers['anthropic-version']);
         self::assertNotNull($sent->body);
-        self::assertStringContainsString('claude-opus-4-7', $sent->body);
+        self::assertStringContainsString('claude-opus-5-5', $sent->body);
         self::assertStringContainsString('Hello', $sent->body);
         self::assertStringContainsString('friendly greeting', $sent->body);
     }
@@ -94,9 +94,9 @@ final class ClaudeProviderTest extends TestCase
     public function testModelSelectionByQuality(): void
     {
         $cases = [
-            [TranslationQuality::FAST,     'claude-haiku-4-5-20251001'],
-            [TranslationQuality::STANDARD, 'claude-sonnet-4-6'],
-            [TranslationQuality::HIGH,     'claude-opus-4-7'],
+            [TranslationQuality::FAST,     'claude-haiku-5-5'],
+            [TranslationQuality::STANDARD, 'claude-sonnet-5-5'],
+            [TranslationQuality::HIGH,     'claude-opus-5-5'],
         ];
 
         foreach ($cases as [$quality, $expectedModel]) {
@@ -320,6 +320,113 @@ final class ClaudeProviderTest extends TestCase
             ['one', 'other'],
             array_keys($result->translatedPluralForms),
         );
+    }
+
+    public function testRequestUsesStructuredOutputEffortAndFallback(): void
+    {
+        $http = new StubHttpClient();
+        $http->enqueueResponse(self::successResponse(self::claudeBody(['translatedText' => 'ok'])));
+
+        (new ClaudeProvider($http, 'k'))->translate(self::sampleRequest());
+
+        $sent = $http->sent[0];
+        $payload = json_decode($sent->body ?? '', true, flags: JSON_THROW_ON_ERROR);
+        self::assertSame('claude-sonnet-5-5', $payload['model']);
+        self::assertSame('medium', $payload['output_config']['effort']);
+        self::assertSame('json_schema', $payload['output_config']['format']['type']);
+        self::assertSame(['translatedText'], $payload['output_config']['format']['schema']['required']);
+        self::assertSame('default', $payload['fallbacks']);
+        self::assertSame('server-side-fallback-2026-07-01', $sent->headers['anthropic-beta']);
+    }
+
+    public function testFastQualityHasNoFallback(): void
+    {
+        $http = new StubHttpClient();
+        $http->enqueueResponse(self::successResponse(self::claudeBody(['translatedText' => 'ok'])));
+
+        (new ClaudeProvider($http, 'k'))->translate(new TranslationRequest(
+            sourceText: 'Hi',
+            sourceLocale: 'en',
+            targetLocale: 'fr',
+            quality: TranslationQuality::FAST,
+        ));
+
+        $payload = json_decode($http->sent[0]->body ?? '', true, flags: JSON_THROW_ON_ERROR);
+        self::assertArrayNotHasKey('fallbacks', $payload);
+        self::assertArrayNotHasKey('anthropic-beta', $http->sent[0]->headers);
+    }
+
+    public function testPluralRequestSchemaRequiresTheOtherForm(): void
+    {
+        $http = new StubHttpClient();
+        $http->enqueueResponse(self::successResponse(self::claudeBody([
+            'translatedText' => 'Une pomme',
+            'plurals' => ['one' => 'Une pomme', 'other' => '%count% pommes'],
+        ])));
+
+        (new ClaudeProvider($http, 'k'))->translate(new TranslationRequest(
+            sourceText: 'An apple',
+            sourceLocale: 'en',
+            targetLocale: 'fr',
+            sourcePluralText: '%count% apples',
+        ));
+
+        $payload = json_decode($http->sent[0]->body ?? '', true, flags: JSON_THROW_ON_ERROR);
+        $schema = $payload['output_config']['format']['schema'];
+        self::assertSame(['translatedText', 'plurals'], $schema['required']);
+        self::assertSame(['other'], $schema['properties']['plurals']['required']);
+    }
+
+    public function testSourceIsSentAsAJsonString(): void
+    {
+        $http = new StubHttpClient();
+        $http->enqueueResponse(self::successResponse(self::claudeBody(['translatedText' => 'ok'])));
+
+        (new ClaudeProvider($http, 'k'))->translate(new TranslationRequest(
+            sourceText: "Say \"hi\"\nnow",
+            sourceLocale: 'en',
+            targetLocale: 'fr',
+        ));
+
+        $payload = json_decode($http->sent[0]->body ?? '', true, flags: JSON_THROW_ON_ERROR);
+        self::assertStringContainsString('Source (JSON string): "Say \"hi\"\nnow"', $payload['messages'][0]['content']);
+    }
+
+    public function testRefusalRaisesProviderException(): void
+    {
+        $http = new StubHttpClient();
+        $http->enqueueResponse(self::successResponse((string) json_encode([
+            'stop_reason' => 'refusal',
+            'stop_details' => ['type' => 'refusal', 'category' => 'cyber'],
+            'content' => [],
+        ])));
+
+        $this->expectException(AiProviderException::class);
+        $this->expectExceptionMessage('category: cyber');
+        (new ClaudeProvider($http, 'k'))->translate(self::sampleRequest());
+    }
+
+    public function testTruncatedAnswerRaisesProviderException(): void
+    {
+        $http = new StubHttpClient();
+        $http->enqueueResponse(self::successResponse((string) json_encode([
+            'stop_reason' => 'max_tokens',
+            'content' => [['type' => 'text', 'text' => '{"translatedText": "Bon']],
+        ])));
+
+        $this->expectException(AiProviderException::class);
+        $this->expectExceptionMessage('ran out of tokens');
+        (new ClaudeProvider($http, 'k'))->translate(self::sampleRequest());
+    }
+
+    public function testInvalidUtf8SourceRaisesProviderException(): void
+    {
+        $this->expectException(AiProviderException::class);
+        (new ClaudeProvider(new StubHttpClient(), 'k'))->translate(new TranslationRequest(
+            sourceText: "bad \xFF",
+            sourceLocale: 'en',
+            targetLocale: 'fr',
+        ));
     }
 
     private static function sampleRequest(): TranslationRequest

@@ -73,6 +73,22 @@ final class DeeplProvider implements AiProviderInterface
      */
     private const string FREE_KEY_SUFFIX = ':fx';
 
+    /**
+     * @var list<non-empty-string> Target variants accepted by DeepL.
+     */
+    private const array TARGET_VARIANTS = ['EN-GB', 'EN-US', 'PT-BR', 'PT-PT', 'ZH-HANS', 'ZH-HANT', 'ES-419'];
+
+    /**
+     * @var array<non-empty-string, non-empty-string> Region tags mapped to the DeepL script variant.
+     */
+    private const array TARGET_ALIASES = [
+        'ZH-CN' => 'ZH-HANS',
+        'ZH-SG' => 'ZH-HANS',
+        'ZH-TW' => 'ZH-HANT',
+        'ZH-HK' => 'ZH-HANT',
+        'ZH-MO' => 'ZH-HANT',
+    ];
+
     private const int HTTP_UNAUTHORIZED = 401;
     private const int HTTP_FORBIDDEN = 403;
     private const int HTTP_TOO_MANY_REQUESTS = 429;
@@ -148,9 +164,13 @@ final class DeeplProvider implements AiProviderInterface
     {
         $payload = [
             'text'        => [$request->sourceText],
-            'target_lang' => $this->toDeeplLocale($request->targetLocale),
-            'source_lang' => $this->toDeeplLocale($request->sourceLocale),
+            'target_lang' => $this->toDeeplTarget($request->targetLocale),
+            'source_lang' => $this->toDeeplSource($request->sourceLocale),
         ];
+        if ($request->context !== null) {
+            // Read by DeepL to disambiguate, neither translated nor billed
+            $payload['context'] = $request->context;
+        }
 
         return new HttpRequest(
             method: HttpMethod::POST,
@@ -159,15 +179,29 @@ final class DeeplProvider implements AiProviderInterface
                 'authorization' => 'DeepL-Auth-Key ' . $this->apiKey,
                 'content-type'  => 'application/json',
             ],
-            body: json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}',
+            body: $this->encodeJson($payload),
         );
     }
 
-    private function toDeeplLocale(string $locale): string
+    /**
+     * Source languages are bare languages for DeepL (`EN`, never `EN-US`).
+     */
+    private function toDeeplSource(string $locale): string
     {
-        // DeepL accepts both `EN` and `EN-GB`; canonicalize by
-        // upper-casing the whole tag and replacing `_` with `-`.
-        return strtoupper(str_replace('_', '-', $locale));
+        return strtoupper(explode('-', str_replace('_', '-', $locale))[0]);
+    }
+
+    /**
+     * Target languages: the regional or script variants DeepL knows
+     * (`EN-GB`, `PT-BR`, `ZH-HANS`…), else the bare language (`fr-FR`
+     * becomes `FR`, which DeepL accepts where it rejects `FR-FR`).
+     */
+    private function toDeeplTarget(string $locale): string
+    {
+        $tag = strtoupper(str_replace('_', '-', $locale));
+        $tag = self::TARGET_ALIASES[$tag] ?? $tag;
+
+        return in_array($tag, self::TARGET_VARIANTS, true) ? $tag : explode('-', $tag)[0];
     }
 
     private function parseResponse(HttpResponse $response): TranslationResult
@@ -230,6 +264,22 @@ final class DeeplProvider implements AiProviderInterface
             $response->statusCode,
             $this->snippet($response->body),
         ));
+    }
+
+    /**
+     * @throws AiProviderException When the value is not valid UTF-8.
+     */
+    private function encodeJson(mixed $value): string
+    {
+        try {
+            return json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        } catch (JsonException $e) {
+            throw new AiProviderException(
+                'Cannot encode the DeepL request as JSON: ' . $e->getMessage(),
+                0,
+                $e,
+            );
+        }
     }
 
     private function snippet(string $body): string
