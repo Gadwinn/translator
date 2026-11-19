@@ -32,15 +32,32 @@ enum CldrPluralFamily
     case OneIsOne;
 
     /**
-     * French-style (`n == 0 || n == 1 ? one : other`).
+     * `n == 0 || n == 1 ? one : other` (Hindi, Persian, Armenian,
+     * Vietnamese…).
      */
     case ZeroOrOneIsOne;
 
     /**
-     * East-Slavic (Russian, Ukrainian, Belarusian, Serbian, Croatian,
-     * Bosnian).
+     * Spanish, Italian, Catalan, Galician, European Portuguese:
+     * `one` for 1, `many` for an exact multiple of a million, else `other`.
+     */
+    case OneIsOneMillionIsMany;
+
+    /**
+     * French and Portuguese (Brazilian rules): `one` for 0 and 1,
+     * `many` for an exact multiple of a million, else `other`.
+     */
+    case ZeroOrOneIsOneMillionIsMany;
+
+    /**
+     * East-Slavic (Russian, Ukrainian, Belarusian): `one`, `few`, `many`.
      */
     case SlavicEast;
+
+    /**
+     * Serbian, Croatian, Bosnian: `one`, `few`, `other` (no `many`).
+     */
+    case SlavicSouth;
 
     /**
      * Polish (distinct from the East-Slavic shape: `n == 1` is
