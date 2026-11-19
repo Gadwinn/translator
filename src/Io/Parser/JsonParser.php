@@ -11,6 +11,7 @@ use G\Translator\Enum\Format;
 use G\Translator\Exception\Io\ParserException;
 use G\Translator\Io\Source\SourceInterface;
 use JsonException;
+use stdClass;
 
 /**
  * `ParserInterface` implementation for generic JSON translation
@@ -29,8 +30,9 @@ use JsonException;
  *     ```
  *     becomes one entry with id `"app.title"`.
  *
- * Non-string leaves (numbers, booleans, `null`, arrays, deeply
- * mixed structures) raise `ParserException`. JSON syntax errors
+ * Non-string leaves (numbers, booleans, `null`, lists, deeply
+ * mixed structures) raise `ParserException`, as does a top-level
+ * value that is not an object. A UTF-8 BOM is tolerated. JSON syntax errors
  * raise `ParserException` as well.
  *
  * The JSON format carries no native concept of plurals, contexts,
@@ -47,6 +49,11 @@ final class JsonParser implements ParserInterface
      */
     private const string KEY_SEPARATOR = '.';
 
+    /**
+     * @var non-empty-string UTF-8 byte order mark, tolerated at the start.
+     */
+    private const string BOM = "\xEF\xBB\xBF";
+
     public function parse(
         SourceInterface $source,
         string $locale,
@@ -54,13 +61,17 @@ final class JsonParser implements ParserInterface
     ): TranslationBagInterface {
         $bag = new TranslationBag($locale);
         $content = trim($source->read());
+        if (str_starts_with($content, self::BOM)) {
+            $content = trim(substr($content, strlen(self::BOM)));
+        }
         if ($content === '') {
             return $bag;
         }
 
         try {
             /** @var mixed $decoded */
-            $decoded = json_decode($content, true, flags: JSON_THROW_ON_ERROR);
+            // Decoded as objects so that a JSON list is told apart from a dictionary
+            $decoded = json_decode($content, false, flags: JSON_THROW_ON_ERROR);
         } catch (JsonException $e) {
             throw new ParserException(sprintf(
                 'JSON source "%s" is not valid JSON: %s',
@@ -69,7 +80,7 @@ final class JsonParser implements ParserInterface
             ), 0, $e);
         }
 
-        if (!is_array($decoded)) {
+        if (!$decoded instanceof stdClass) {
             throw new ParserException(sprintf(
                 'JSON source "%s" must decode to an object/dictionary at the top level.',
                 $source->identifier(),
@@ -89,14 +100,13 @@ final class JsonParser implements ParserInterface
     }
 
     /**
-     * @param array<int|string, mixed> $data
      * @param non-empty-string $sourceIdentifier
      *
      * @return iterable<non-empty-string, string>
      */
-    private function flatten(array $data, string $prefix, string $sourceIdentifier): iterable
+    private function flatten(stdClass $data, string $prefix, string $sourceIdentifier): iterable
     {
-        foreach ($data as $key => $value) {
+        foreach (get_object_vars($data) as $key => $value) {
             $segment = (string) $key;
             if ($segment === '') {
                 throw new ParserException(sprintf(
@@ -112,7 +122,7 @@ final class JsonParser implements ParserInterface
                 continue;
             }
 
-            if (is_array($value)) {
+            if ($value instanceof stdClass) {
                 yield from $this->flatten($value, $fullKey, $sourceIdentifier);
                 continue;
             }

@@ -10,6 +10,7 @@ use G\Translator\Exception\Io\SerializerException;
 use G\Translator\Io\Parser\AngularJsonParser;
 use G\Translator\Io\Serializer\AngularJsonSerializer;
 use G\Translator\Io\Source\StringSource;
+use G\Translator\Exception\Io\ParserException;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 
@@ -123,6 +124,40 @@ final class AngularJsonRoundtripTest extends TestCase
 
         $this->expectException(SerializerException::class);
         $this->expectExceptionMessage('Failed to encode translation bag as Angular JSON');
+        (new AngularJsonSerializer())->serialize($bag);
+    }
+
+    public function testBomIsTolerated(): void
+    {
+        $bag = (new AngularJsonParser())->parse(new StringSource("\xEF\xBB\xBF" . '{"hello": "Hello"}'), 'en');
+        self::assertSame('Hello', $bag->get('hello')->content());
+    }
+
+    public function testListValueIsRejected(): void
+    {
+        $this->expectException(ParserException::class);
+        (new AngularJsonParser())->parse(new StringSource('{"items": ["a", "b"]}'), 'en');
+    }
+
+    public function testNumericIdsRoundtripAsAnObject(): void
+    {
+        $bag = new TranslationBag('en');
+        $bag->add(new TranslationEntry(id: '0', content: 'zero'));
+        $bag->add(new TranslationEntry(id: '1', content: 'one'));
+
+        $out = (new AngularJsonSerializer())->serialize($bag);
+        self::assertStringStartsWith('{', $out);
+
+        $reparsed = (new AngularJsonParser())->parse(new StringSource($out), 'en');
+        self::assertSame('one', $reparsed->get('1')->content());
+    }
+
+    public function testEmptySegmentIsRejected(): void
+    {
+        $bag = new TranslationBag('en');
+        $bag->add(new TranslationEntry(id: 'app..title', content: 'Title'));
+
+        $this->expectException(SerializerException::class);
         (new AngularJsonSerializer())->serialize($bag);
     }
 }

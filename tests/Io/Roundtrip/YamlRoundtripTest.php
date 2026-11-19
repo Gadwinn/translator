@@ -250,18 +250,17 @@ final class YamlRoundtripTest extends TestCase
         self::assertSame("line\rCR", $bag->get('hello')->content());
     }
 
-    public function testDoubleQuotedUnknownEscapeIsPreserved(): void
+    public function testDoubleQuotedUnknownEscapeIsRejected(): void
     {
-        // \x is not a known escape — kept verbatim as \x
-        $bag = (new YamlParser())->parse(new StringSource('hello: "val\\xhex"'), 'en');
-        self::assertSame('val\\xhex', $bag->get('hello')->content());
+        $this->expectException(ParserException::class);
+        (new YamlParser())->parse(new StringSource('hello: "val\\qhex"'), 'en');
     }
 
-    public function testDoubleQuotedTrailingBackslashIsLiteral(): void
+    public function testUnterminatedDoubleQuotedStringIsRejected(): void
     {
-        // YAML: hello: "hello\" — inner = hello\ (backslash at end, no next char)
-        $bag = (new YamlParser())->parse(new StringSource('hello: "hello\\"'), 'en');
-        self::assertSame('hello\\', $bag->get('hello')->content());
+        // YAML: hello: "hello\" — the backslash escapes the closing quote
+        $this->expectException(ParserException::class);
+        (new YamlParser())->parse(new StringSource('hello: "hello\\"'), 'en');
     }
 
     public function testSerializerEscapesBackslash(): void
@@ -282,4 +281,94 @@ final class YamlRoundtripTest extends TestCase
         self::assertStringContainsString('k: "line\\rCR"', $out);
     }
 
+    public function testHashInsideQuotedValueIsNotAComment(): void
+    {
+        $yaml = "a: 'Item #1' # comment\nb: \"Tag #2\"\nc: Price #3";
+        $bag = (new YamlParser())->parse(new StringSource($yaml), 'en');
+
+        self::assertSame('Item #1', $bag->get('a')->content());
+        self::assertSame('Tag #2', $bag->get('b')->content());
+        self::assertSame('Price', $bag->get('c')->content());
+    }
+
+    public function testCommentAfterKeyOfNestedMap(): void
+    {
+        $yaml = "app: # section\n  title: Title";
+        $bag = (new YamlParser())->parse(new StringSource($yaml), 'en');
+
+        self::assertSame('Title', $bag->get('app.title')->content());
+    }
+
+    public function testGarbageAfterQuotedValueIsRejected(): void
+    {
+        $this->expectException(ParserException::class);
+        (new YamlParser())->parse(new StringSource("a: 'one' two"), 'en');
+    }
+
+    public function testQuotedKeys(): void
+    {
+        $yaml = "'Hello world': Bonjour\n\"Bye: now\": Salut\n'it''s': C'est";
+        $bag = (new YamlParser())->parse(new StringSource($yaml), 'fr');
+
+        self::assertSame('Bonjour', $bag->get('Hello world')->content());
+        self::assertSame('Salut', $bag->get('Bye: now')->content());
+        self::assertSame("C'est", $bag->get("it's")->content());
+    }
+
+    public function testDuplicateKeyIsRejected(): void
+    {
+        $this->expectException(ParserException::class);
+        (new YamlParser())->parse(new StringSource("a: one\na: two"), 'en');
+    }
+
+    public function testDocumentStartMarkerAfterAComment(): void
+    {
+        $bag = (new YamlParser())->parse(new StringSource("# header\n---\nhello: Hello"), 'en');
+        self::assertSame('Hello', $bag->get('hello')->content());
+    }
+
+    public function testUnicodeAndHexEscapes(): void
+    {
+        $yaml = 'a: "caf\\u00e9 \\xE9 \\U0001F600 \\/ \\0end"';
+        $bag = (new YamlParser())->parse(new StringSource($yaml), 'en');
+
+        self::assertSame("café é \u{1F600} / \0end", $bag->get('a')->content());
+    }
+
+    public function testSurrogateEscapeIsRejected(): void
+    {
+        $this->expectException(ParserException::class);
+        (new YamlParser())->parse(new StringSource('a: "\\uD800"'), 'en');
+    }
+
+    public function testSerializerQuotesKeysThatAreNotPlain(): void
+    {
+        $bag = new TranslationBag('en');
+        $bag->add(new TranslationEntry(id: 'app.title', content: 'Title'));
+        $bag->add(new TranslationEntry(id: 'Hello world: # "x"', content: 'Bonjour'));
+        $bag->add(new TranslationEntry(id: 'yes', content: 'Oui'));
+        $bag->add(new TranslationEntry(id: '42', content: 'Quarante-deux'));
+
+        $out = (new YamlSerializer())->serialize($bag);
+        self::assertStringContainsString("app.title: \"Title\"\n", $out);
+        self::assertStringContainsString('"Hello world: # \\"x\\"": "Bonjour"', $out);
+        self::assertStringContainsString('"yes": "Oui"', $out);
+
+        $reparsed = (new YamlParser())->parse(new StringSource($out), 'en');
+        self::assertSame('Bonjour', $reparsed->get('Hello world: # "x"')->content());
+        self::assertSame('Oui', $reparsed->get('yes')->content());
+        self::assertSame('Quarante-deux', $reparsed->get('42')->content());
+    }
+
+    public function testControlCharactersRoundtrip(): void
+    {
+        $bag = new TranslationBag('en');
+        $bag->add(new TranslationEntry(id: 'k', content: "bell\x07 esc\x1B del\x7F"));
+
+        $out = (new YamlSerializer())->serialize($bag);
+        self::assertStringContainsString('k: "bell\\x07 esc\\x1B del\\x7F"', $out);
+
+        $reparsed = (new YamlParser())->parse(new StringSource($out), 'en');
+        self::assertSame("bell\x07 esc\x1B del\x7F", $reparsed->get('k')->content());
+    }
 }

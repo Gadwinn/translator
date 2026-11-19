@@ -122,4 +122,29 @@ final class JsonRoundtripTest extends TestCase
         $this->expectExceptionMessage('Failed to encode translation bag as JSON');
         (new JsonSerializer())->serialize($bag);
     }
+
+    public function testBomIsTolerated(): void
+    {
+        $bag = (new JsonParser())->parse(new StringSource("\xEF\xBB\xBF" . '{"hello": "Hello"}'), 'en');
+        self::assertSame('Hello', $bag->get('hello')->content());
+    }
+
+    public function testListValueIsRejected(): void
+    {
+        $this->expectException(ParserException::class);
+        (new JsonParser())->parse(new StringSource('{"items": ["a", "b"]}'), 'en');
+    }
+
+    public function testNumericIdsRoundtripAsAnObject(): void
+    {
+        $bag = new TranslationBag('en');
+        $bag->add(new TranslationEntry(id: '0', content: 'zero'));
+        $bag->add(new TranslationEntry(id: '1', content: 'one'));
+
+        $out = (new JsonSerializer())->serialize($bag);
+        self::assertStringStartsWith('{', $out);
+
+        $reparsed = (new JsonParser())->parse(new StringSource($out), 'en');
+        self::assertSame('one', $reparsed->get('1')->content());
+    }
 }

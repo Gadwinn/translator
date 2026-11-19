@@ -11,6 +11,7 @@ use G\Translator\Enum\Format;
 use G\Translator\Exception\Io\ParserException;
 use G\Translator\Io\Source\SourceInterface;
 use JsonException;
+use stdClass;
 
 /**
  * `ParserInterface` implementation for ngx-translate JSON files
@@ -32,6 +33,11 @@ final class AngularJsonParser implements ParserInterface
      */
     private const string KEY_SEPARATOR = '.';
 
+    /**
+     * @var non-empty-string UTF-8 byte order mark, tolerated at the start.
+     */
+    private const string BOM = "\xEF\xBB\xBF";
+
     public function parse(
         SourceInterface $source,
         string $locale,
@@ -39,13 +45,17 @@ final class AngularJsonParser implements ParserInterface
     ): TranslationBagInterface {
         $bag = new TranslationBag($locale);
         $content = trim($source->read());
+        if (str_starts_with($content, self::BOM)) {
+            $content = trim(substr($content, strlen(self::BOM)));
+        }
         if ($content === '') {
             return $bag;
         }
 
         try {
             /** @var mixed $decoded */
-            $decoded = json_decode($content, true, flags: JSON_THROW_ON_ERROR);
+            // Decoded as objects so that a JSON list is told apart from a dictionary
+            $decoded = json_decode($content, false, flags: JSON_THROW_ON_ERROR);
         } catch (JsonException $e) {
             throw new ParserException(sprintf(
                 'Angular JSON source "%s" is not valid JSON: %s',
@@ -54,7 +64,7 @@ final class AngularJsonParser implements ParserInterface
             ), 0, $e);
         }
 
-        if (!is_array($decoded)) {
+        if (!$decoded instanceof stdClass) {
             throw new ParserException(sprintf(
                 'Angular JSON source "%s" must decode to an object at the top level.',
                 $source->identifier(),
@@ -74,14 +84,13 @@ final class AngularJsonParser implements ParserInterface
     }
 
     /**
-     * @param array<int|string, mixed> $data
      * @param non-empty-string $sourceIdentifier
      *
      * @return iterable<non-empty-string, string>
      */
-    private function flatten(array $data, string $prefix, string $sourceIdentifier): iterable
+    private function flatten(stdClass $data, string $prefix, string $sourceIdentifier): iterable
     {
-        foreach ($data as $key => $value) {
+        foreach (get_object_vars($data) as $key => $value) {
             $segment = (string) $key;
             if ($segment === '') {
                 throw new ParserException(sprintf(
@@ -97,7 +106,7 @@ final class AngularJsonParser implements ParserInterface
                 continue;
             }
 
-            if (is_array($value)) {
+            if ($value instanceof stdClass) {
                 yield from $this->flatten($value, $fullKey, $sourceIdentifier);
                 continue;
             }
