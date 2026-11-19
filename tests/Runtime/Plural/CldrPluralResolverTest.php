@@ -44,9 +44,23 @@ final class CldrPluralResolverTest extends TestCase
         yield 'fr-2-other'     => ['fr-FR', 2, PluralCategory::OTHER];
         yield 'pt-BR-0-one'    => ['pt-BR', 0, PluralCategory::ONE];
         yield 'pt-BR-3-other'  => ['pt-BR', 3, PluralCategory::OTHER];
-        yield 'pt-PT-0-other'  => ['pt-PT', 0, PluralCategory::OTHER]; // parent fallback to pt (OneIsOne)
+        yield 'pt-0-one'       => ['pt',    0, PluralCategory::ONE];  // pt = Brazilian rules in CLDR
+        yield 'pt-PT-0-other'  => ['pt-PT', 0, PluralCategory::OTHER];
         yield 'pt-PT-1-one'    => ['pt-PT', 1, PluralCategory::ONE];
         yield 'hi-0-one'       => ['hi',    0, PluralCategory::ONE];
+        yield 'vi-1-one'       => ['vi',    1, PluralCategory::ONE];
+        yield 'vi-2-other'     => ['vi',    2, PluralCategory::OTHER];
+
+        // Exact multiples of a million take `many` (fr, pt, es, it, ca, gl, pt-PT)
+        yield 'fr-1000000-many'  => ['fr',    1_000_000, PluralCategory::MANY];
+        yield 'fr-2000000-many'  => ['fr',    2_000_000, PluralCategory::MANY];
+        yield 'fr-1000001-other' => ['fr',    1_000_001, PluralCategory::OTHER];
+        yield 'es-1000000-many'  => ['es',    1_000_000, PluralCategory::MANY];
+        yield 'es-1-one'         => ['es',    1, PluralCategory::ONE];
+        yield 'es-0-other'       => ['es',    0, PluralCategory::OTHER];
+        yield 'it-3000000-many'  => ['it-IT', 3_000_000, PluralCategory::MANY];
+        yield 'pt-PT-1000000-many' => ['pt-PT', 1_000_000, PluralCategory::MANY];
+        yield 'en-1000000-other' => ['en',    1_000_000, PluralCategory::OTHER];
 
         // NoPlural family
         yield 'ja-1-other'     => ['ja',    1, PluralCategory::OTHER];
@@ -58,6 +72,12 @@ final class CldrPluralResolverTest extends TestCase
         yield 'ru-21-one'      => ['ru',   21, PluralCategory::ONE];
         yield 'ru-11-many'     => ['ru',   11, PluralCategory::MANY];
         yield 'ru-2-few'       => ['ru',    2, PluralCategory::FEW];
+
+        // SlavicSouth family: no `many`
+        yield 'sr-1-one'       => ['sr',    1, PluralCategory::ONE];
+        yield 'hr-22-few'      => ['hr',   22, PluralCategory::FEW];
+        yield 'bs-5-other'     => ['bs',    5, PluralCategory::OTHER];
+        yield 'hr-11-other'    => ['hr',   11, PluralCategory::OTHER];
         yield 'ru-22-few'      => ['ru',   22, PluralCategory::FEW];
         yield 'ru-5-many'      => ['ru',    5, PluralCategory::MANY];
         yield 'uk-1-one'       => ['uk',    1, PluralCategory::ONE];
@@ -95,7 +115,7 @@ final class CldrPluralResolverTest extends TestCase
         // Hebrew
         yield 'he-1-one'       => ['he',    1, PluralCategory::ONE];
         yield 'he-2-two'       => ['he',    2, PluralCategory::TWO];
-        yield 'he-20-many'     => ['he',   20, PluralCategory::MANY];
+        yield 'he-20-other'    => ['he',   20, PluralCategory::OTHER]; // `many` dropped in CLDR 42
         yield 'he-3-other'     => ['he',    3, PluralCategory::OTHER];
 
         // Slovenian
@@ -133,7 +153,10 @@ final class CldrPluralResolverTest extends TestCase
 
         // Maltese
         yield 'mt-1-one'       => ['mt',    1, PluralCategory::ONE];
+        yield 'mt-2-two'       => ['mt',    2, PluralCategory::TWO];
         yield 'mt-0-few'       => ['mt',    0, PluralCategory::FEW];
+        yield 'mt-3-few'       => ['mt',    3, PluralCategory::FEW];
+        yield 'mt-102-other'   => ['mt',  102, PluralCategory::OTHER];
         yield 'mt-15-many'     => ['mt',   15, PluralCategory::MANY];
         yield 'mt-25-other'    => ['mt',   25, PluralCategory::OTHER];
     }
@@ -161,7 +184,7 @@ final class CldrPluralResolverTest extends TestCase
 
     public function testLocaleParentLookupFallsBackToLanguage(): void
     {
-        // pt-PT not explicitly mapped → falls back to pt → OneIsOne family
-        self::assertSame(PluralCategory::ONE, $this->resolver->resolve(1, 'pt-PT'));
+        // pt-BR not explicitly mapped → falls back to pt
+        self::assertSame(PluralCategory::ONE, $this->resolver->resolve(0, 'pt-BR'));
     }
 }

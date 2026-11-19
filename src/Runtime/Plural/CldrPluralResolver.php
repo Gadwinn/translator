@@ -28,6 +28,9 @@ use G\Translator\Runtime\LocaleNormalizer;
  * `LOCALE_TO_FAMILY` table, or register a new family in
  * `Family` and `resolveForFamily()`.
  *
+ * Rules checked against the CLDR `plurals.xml` (unicode-org/cldr,
+ * 2026-11-19).
+ *
  * Embedded rules are STABLE DATA: they are version-controlled in
  * source, not loaded from JSON at runtime. This matches the
  * zero-dependency philosophy and guarantees deterministic behavior
@@ -46,13 +49,20 @@ final class CldrPluralResolver implements PluralResolverInterface
     private const int HUNDREDS_MODULUS = 100;
 
     /**
+     * @var int Counts that are an exact multiple of this take `many`
+     *      in French, Spanish, Italian… ("un million de", "un millón de").
+     */
+    private const int MILLION = 1_000_000;
+
+    /**
      * Mapping of canonical BCP-47 locale (or just language subtag)
      * to the rule family that locale follows.
      *
      * Lookups are performed first on the full locale, then on the
      * language root. This lets callers express both broad rules
      * (`'fr' => Family::ZeroOrOneIsOne`) and locale-specific overrides
-     * (`'pt-BR' => Family::ZeroOrOneIsOne` while `'pt' => Family::OneIsOne`).
+     * (`'pt-PT' => Family::OneIsOneMillionIsMany` while `'pt'` follows the
+     * Brazilian rules).
      *
      * @var array<non-empty-string, CldrPluralFamily>
      */
@@ -61,7 +71,6 @@ final class CldrPluralResolver implements PluralResolverInterface
         'ja' => CldrPluralFamily::NoPlural,
         'ko' => CldrPluralFamily::NoPlural,
         'zh' => CldrPluralFamily::NoPlural,
-        'vi' => CldrPluralFamily::NoPlural,
         'th' => CldrPluralFamily::NoPlural,
         'id' => CldrPluralFamily::NoPlural,
         'ms' => CldrPluralFamily::NoPlural,
@@ -80,11 +89,6 @@ final class CldrPluralResolver implements PluralResolverInterface
         'nn' => CldrPluralFamily::OneIsOne,
         'fi' => CldrPluralFamily::OneIsOne,
         'et' => CldrPluralFamily::OneIsOne,
-        'it' => CldrPluralFamily::OneIsOne,
-        'es' => CldrPluralFamily::OneIsOne,
-        'ca' => CldrPluralFamily::OneIsOne,
-        'gl' => CldrPluralFamily::OneIsOne,
-        'pt' => CldrPluralFamily::OneIsOne,
         'el' => CldrPluralFamily::OneIsOne,
         'bg' => CldrPluralFamily::OneIsOne,
         'hu' => CldrPluralFamily::OneIsOne,
@@ -94,20 +98,32 @@ final class CldrPluralResolver implements PluralResolverInterface
         'eu' => CldrPluralFamily::OneIsOne,
         'af' => CldrPluralFamily::OneIsOne,
 
+        // Family: OneIsOneMillionIsMany
+        'it'    => CldrPluralFamily::OneIsOneMillionIsMany,
+        'es'    => CldrPluralFamily::OneIsOneMillionIsMany,
+        'ca'    => CldrPluralFamily::OneIsOneMillionIsMany,
+        'gl'    => CldrPluralFamily::OneIsOneMillionIsMany,
+        'pt-PT' => CldrPluralFamily::OneIsOneMillionIsMany,
+
         // Family: ZeroOrOneIsOne
-        'fr'    => CldrPluralFamily::ZeroOrOneIsOne,
-        'pt-BR' => CldrPluralFamily::ZeroOrOneIsOne,
-        'hi'    => CldrPluralFamily::ZeroOrOneIsOne,
-        'fa'    => CldrPluralFamily::ZeroOrOneIsOne,
-        'hy'    => CldrPluralFamily::ZeroOrOneIsOne,
+        'hi' => CldrPluralFamily::ZeroOrOneIsOne,
+        'fa' => CldrPluralFamily::ZeroOrOneIsOne,
+        'hy' => CldrPluralFamily::ZeroOrOneIsOne,
+        'vi' => CldrPluralFamily::ZeroOrOneIsOne,
+
+        // Family: ZeroOrOneIsOneMillionIsMany
+        'fr' => CldrPluralFamily::ZeroOrOneIsOneMillionIsMany,
+        'pt' => CldrPluralFamily::ZeroOrOneIsOneMillionIsMany,
 
         // Family: SlavicEast (Russian-style)
         'ru' => CldrPluralFamily::SlavicEast,
         'uk' => CldrPluralFamily::SlavicEast,
         'be' => CldrPluralFamily::SlavicEast,
-        'sr' => CldrPluralFamily::SlavicEast,
-        'hr' => CldrPluralFamily::SlavicEast,
-        'bs' => CldrPluralFamily::SlavicEast,
+
+        // Family: SlavicSouth (Serbo-Croatian)
+        'sr' => CldrPluralFamily::SlavicSouth,
+        'hr' => CldrPluralFamily::SlavicSouth,
+        'bs' => CldrPluralFamily::SlavicSouth,
 
         // Family: Polish
         'pl' => CldrPluralFamily::Polish,
@@ -184,7 +200,12 @@ final class CldrPluralResolver implements PluralResolverInterface
             CldrPluralFamily::NoPlural       => PluralCategory::OTHER,
             CldrPluralFamily::OneIsOne       => $this->ruleOneIsOne($n),
             CldrPluralFamily::ZeroOrOneIsOne => $this->ruleZeroOrOneIsOne($n),
+            CldrPluralFamily::OneIsOneMillionIsMany       => $this->ruleMillionIsMany($n)
+                ?? $this->ruleOneIsOne($n),
+            CldrPluralFamily::ZeroOrOneIsOneMillionIsMany => $this->ruleMillionIsMany($n)
+                ?? $this->ruleZeroOrOneIsOne($n),
             CldrPluralFamily::SlavicEast     => $this->ruleSlavicEast($n),
+            CldrPluralFamily::SlavicSouth    => $this->ruleSlavicSouth($n),
             CldrPluralFamily::Polish         => $this->rulePolish($n),
             CldrPluralFamily::SlavicWest     => $this->ruleSlavicWest($n),
             CldrPluralFamily::Romanian       => $this->ruleRomanian($n),
@@ -207,6 +228,18 @@ final class CldrPluralResolver implements PluralResolverInterface
     private function ruleZeroOrOneIsOne(int $n): PluralCategory
     {
         return ($n === 0 || $n === 1) ? PluralCategory::ONE : PluralCategory::OTHER;
+    }
+
+    private function ruleMillionIsMany(int $n): ?PluralCategory
+    {
+        return $n !== 0 && $n % self::MILLION === 0 ? PluralCategory::MANY : null;
+    }
+
+    private function ruleSlavicSouth(int $n): PluralCategory
+    {
+        $category = $this->ruleSlavicEast($n);
+
+        return $category === PluralCategory::MANY ? PluralCategory::OTHER : $category;
     }
 
     private function ruleSlavicEast(int $n): PluralCategory
@@ -300,11 +333,7 @@ final class CldrPluralResolver implements PluralResolverInterface
             return PluralCategory::TWO;
         }
 
-        $tens = $n % self::TENS_MODULUS;
-        if ($n > 10 && $tens === 0) {
-            return PluralCategory::MANY;
-        }
-
+        // CLDR 42 dropped the former `many` (20, 30, 40…)
         return PluralCategory::OTHER;
     }
 
@@ -391,9 +420,12 @@ final class CldrPluralResolver implements PluralResolverInterface
         if ($n === 1) {
             return PluralCategory::ONE;
         }
+        if ($n === 2) {
+            return PluralCategory::TWO;
+        }
 
         $hundreds = $n % self::HUNDREDS_MODULUS;
-        if ($n === 0 || ($hundreds >= 2 && $hundreds <= 10)) {
+        if ($n === 0 || ($hundreds >= 3 && $hundreds <= 10)) {
             return PluralCategory::FEW;
         }
         if ($hundreds >= 11 && $hundreds <= 19) {
