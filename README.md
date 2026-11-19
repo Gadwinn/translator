@@ -199,6 +199,15 @@ $po = $detector->serializerFor(Format::PO)->serialize($targetBag);
 file_put_contents('pl_PL.po', $po);
 ```
 
+`OpenAiProvider` maps each quality to a model (`gpt-6-luna`, `gpt-6.1-terra`, `gpt-6.2-sol`
+by default); replace any of them as models change:
+
+```php
+use G\Translator\Bridge\Ai\Provider\OpenAiProvider;
+
+$provider = new OpenAiProvider($http, apiKey: getenv('OPENAI_API_KEY'), highModel: 'gpt-6.2-astra');
+```
+
 ### 9. Per-request AI translation
 
 ```php
