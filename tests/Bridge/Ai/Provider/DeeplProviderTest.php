@@ -43,23 +43,26 @@ final class DeeplProviderTest extends TestCase
         self::assertSame('EN', $result->metadata['detected_source_language']);
     }
 
-    public function testPluralSourceIsIgnoredForDeepL(): void
+    public function testPluralSourceIsRefusedBeforeSending(): void
     {
         $http = new StubHttpClient();
-        $http->enqueueResponse(self::successResponse(json_encode([
-            'translations' => [['text' => 'Une pomme']],
-        ], JSON_THROW_ON_ERROR)));
         $provider = new DeeplProvider($http, 'k');
 
-        $result = $provider->translate(new TranslationRequest(
-            sourceText: 'One apple',
-            sourceLocale: 'en',
-            targetLocale: 'fr',
-            sourcePluralText: '%d apples', // present, but DeepL ignores it
-        ));
+        try {
+            $provider->translateBatch([
+                'apple' => new TranslationRequest(
+                    sourceText: 'One apple',
+                    sourceLocale: 'en',
+                    targetLocale: 'fr',
+                    sourcePluralText: '%d apples',
+                ),
+            ]);
+            self::fail('A plural request must be refused.');
+        } catch (AiProviderException $e) {
+            self::assertStringContainsString('plural', $e->getMessage());
+        }
 
-        self::assertSame('Une pomme', $result->translatedText);
-        self::assertSame([], $result->translatedPluralForms);
+        self::assertSame([], $http->sent);
     }
 
     public function testFreeKeyRoutesToFreeEndpoint(): void
