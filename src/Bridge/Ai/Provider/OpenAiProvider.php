@@ -23,11 +23,17 @@ use JsonException;
  * `AiProviderInterface` implementation backed by OpenAI's Chat
  * Completions API with JSON mode (`response_format`).
  *
- * Model selection follows `TranslationQuality`:
+ * Model selection follows `TranslationQuality`, each model being
+ * replaceable through the constructor (`fastModel`, `standardModel`,
+ * `highModel`) without waiting for a new version of the package:
  *
- *   - `FAST`     → `gpt-4o-mini`
- *   - `STANDARD` → `gpt-4o`
- *   - `HIGH`     → `gpt-4o`
+ *   - `FAST`     → `gpt-6-luna`    (`DEFAULT_FAST_MODEL`)
+ *   - `STANDARD` → `gpt-6.1-terra` (`DEFAULT_STANDARD_MODEL`)
+ *   - `HIGH`     → `gpt-6.2-sol`   (`DEFAULT_HIGH_MODEL`)
+ *
+ * Defaults checked on developers.openai.com on 2026-11-19 (all three
+ * support Chat Completions; `gpt-4o` and `gpt-4o-mini` shut down on
+ * 2027-01-14).
  *
  * Plural support: leverages OpenAI's `response_format: json_object`
  * mode. The provider prompts the model for an envelope containing
@@ -58,6 +64,21 @@ final class OpenAiProvider implements AiProviderInterface
      */
     public const string ENDPOINT = 'https://api.openai.com/v1/chat/completions';
 
+    /**
+     * @var non-empty-string Model used for `TranslationQuality::FAST` by default.
+     */
+    public const string DEFAULT_FAST_MODEL = 'gpt-6-luna';
+
+    /**
+     * @var non-empty-string Model used for `TranslationQuality::STANDARD` by default.
+     */
+    public const string DEFAULT_STANDARD_MODEL = 'gpt-6.1-terra';
+
+    /**
+     * @var non-empty-string Model used for `TranslationQuality::HIGH` by default.
+     */
+    public const string DEFAULT_HIGH_MODEL = 'gpt-6.2-sol';
+
     private const int HTTP_UNAUTHORIZED = 401;
     private const int HTTP_FORBIDDEN = 403;
     private const int HTTP_TOO_MANY_REQUESTS = 429;
@@ -76,12 +97,18 @@ final class OpenAiProvider implements AiProviderInterface
      * @param non-empty-string $apiKey The OpenAI API key.
      * @param non-empty-string|null $endpoint Override the default
      *        endpoint URL (e.g., for testing against a local proxy).
+     * @param non-empty-string $fastModel Model for `TranslationQuality::FAST`.
+     * @param non-empty-string $standardModel Model for `TranslationQuality::STANDARD`.
+     * @param non-empty-string $highModel Model for `TranslationQuality::HIGH`.
      */
     public function __construct(
         private readonly HttpClientInterface $http,
         #[SensitiveParameter]
         private readonly string $apiKey,
         private readonly ?string $endpoint = null,
+        private readonly string $fastModel = self::DEFAULT_FAST_MODEL,
+        private readonly string $standardModel = self::DEFAULT_STANDARD_MODEL,
+        private readonly string $highModel = self::DEFAULT_HIGH_MODEL,
     ) {
     }
 
@@ -149,9 +176,9 @@ final class OpenAiProvider implements AiProviderInterface
     private function modelFor(TranslationQuality $quality): string
     {
         return match ($quality) {
-            TranslationQuality::FAST     => 'gpt-4o-mini',
-            TranslationQuality::STANDARD => 'gpt-4o',
-            TranslationQuality::HIGH     => 'gpt-4o',
+            TranslationQuality::FAST     => $this->fastModel,
+            TranslationQuality::STANDARD => $this->standardModel,
+            TranslationQuality::HIGH     => $this->highModel,
         };
     }
 
