@@ -114,4 +114,55 @@ enum CldrPluralFamily
      * Maltese.
      */
     case Maltese;
+
+    /**
+     * Icelandic, Macedonian: `one` when the count ends in 1 (but not 11).
+     */
+    case OneEndsInOne;
+
+    /**
+     * Filipino, Tagalog, Cebuano: `one` for 1, 2, 3 and every count not
+     * ending in 4, 6 or 9.
+     */
+    case Filipino;
+
+    /**
+     * Chuvash, Colognian, Langi…: `zero` for 0, `one` for 1, else `other`.
+     */
+    case ZeroOneOther;
+
+    /**
+     * Scottish Gaelic.
+     */
+    case ScottishGaelic;
+
+    /**
+     * Breton.
+     */
+    case Breton;
+
+    /**
+     * Manx.
+     */
+    case Manx;
+
+    /**
+     * Cornish.
+     */
+    case Cornish;
+
+    /**
+     * Samogitian.
+     */
+    case Samogitian;
+
+    /**
+     * Tachelhit.
+     */
+    case Tachelhit;
+
+    /**
+     * Central Atlas Tamazight.
+     */
+    case CentralAtlasTamazight;
 }
