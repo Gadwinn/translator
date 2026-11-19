@@ -185,13 +185,15 @@ final class PoSerializer implements SerializerInterface
             '#. ',
             $this->stringListMetadata($metadata, 'extracted'),
         );
-        foreach ($this->stringListMetadata($metadata, 'references') as $reference) {
-            $lines[] = '#: ' . $reference;
-        }
+        $this->appendCommentLines(
+            $lines,
+            '#: ',
+            $this->stringListMetadata($metadata, 'references'),
+        );
 
         $flags = $this->stringListMetadata($metadata, 'flags');
         if ($flags !== []) {
-            $lines[] = '#, ' . implode(', ', $flags);
+            $this->appendCommentLines($lines, '#, ', [implode(', ', $flags)]);
         }
 
         $context = $entry->context();
@@ -227,8 +229,11 @@ final class PoSerializer implements SerializerInterface
      */
     private function appendCommentLines(array &$lines, string $prefix, array $values): void
     {
+        // A comment spanning several lines gets the prefix on each of them
         foreach ($values as $value) {
-            $lines[] = $prefix . $value;
+            foreach (explode("\n", str_replace(["\r\n", "\r"], "\n", $value)) as $line) {
+                $lines[] = rtrim($prefix . $line);
+            }
         }
     }
 
