@@ -30,8 +30,16 @@ use Throwable;
  *   - `<target>` populated from the entry's `content()`.
  *   - `<note>` elements from `metadata['notes']` when present.
  *
+ * Units carry the entry id twice: `id` and `resname` in XLIFF 1.2;
+ * `name` and `id` in XLIFF 2.0, where `id` must be an XML NMTOKEN
+ * (an id with spaces or punctuation gets an `id` derived from its
+ * hash). The file is named after `$domain` (`messages` when null).
+ *
  * Limitations match the parser: no plural-unit groups, no inline
- * placeholder fidelity, no context (`msgctxt`-equivalent).
+ * placeholder fidelity, no context (`msgctxt`-equivalent). Two
+ * entries sharing an id (different contexts or domains) cannot both
+ * be written, nor can control characters that XML 1.0 forbids: both
+ * throw a `SerializerException`.
  */
 final class XliffSerializer implements SerializerInterface
 {
@@ -47,20 +55,34 @@ final class XliffSerializer implements SerializerInterface
 
     private const string XML_ENCODING = 'UTF-8';
 
+    private const string DEFAULT_FILE = 'messages';
+
+    /**
+     * @var non-empty-string Characters XML 1.0 forbids in a document.
+     */
+    private const string FORBIDDEN_CHARACTERS = '/[\x00-\x08\x0B\x0C\x0E-\x1F]/';
+
+    /**
+     * @var non-empty-string An XML NMTOKEN (simplified to letters, digits, `.`, `-`, `_`, `:`).
+     */
+    private const string NMTOKEN = '/^[\p{L}\p{N}._:\-]+$/uD';
+
     public function serialize(
         TranslationBagInterface $bag,
         ?string $domain = null,
     ): string {
         $entries = $bag->all($domain);
         $version = $this->resolveVersion($entries);
+        $this->assertWritable($entries);
+        $file = $domain ?? self::DEFAULT_FILE;
 
         try {
             $doc = new DOMDocument(self::XML_VERSION, self::XML_ENCODING);
             $doc->formatOutput = true;
 
             match ($version) {
-                XliffParser::VERSION_2_0 => $this->buildXliff20($doc, $bag, $entries),
-                default                  => $this->buildXliff12($doc, $bag, $entries),
+                XliffParser::VERSION_2_0 => $this->buildXliff20($doc, $bag, $entries, $file),
+                default                  => $this->buildXliff12($doc, $bag, $entries, $file),
             };
 
             $xml = $doc->saveXML();
@@ -105,7 +127,7 @@ final class XliffSerializer implements SerializerInterface
     /**
      * @param list<TranslationEntryInterface> $entries
      */
-    private function buildXliff12(DOMDocument $doc, TranslationBagInterface $bag, array $entries): void
+    private function buildXliff12(DOMDocument $doc, TranslationBagInterface $bag, array $entries, string $name): void
     {
         $root = $doc->createElement('xliff');
         $root->setAttribute('version', XliffParser::VERSION_1_2);
@@ -116,7 +138,7 @@ final class XliffSerializer implements SerializerInterface
         $file->setAttribute('source-language', 'en');
         $file->setAttribute('target-language', $bag->locale());
         $file->setAttribute('datatype', 'plaintext');
-        $file->setAttribute('original', 'messages');
+        $file->setAttribute('original', $name);
         $root->appendChild($file);
 
         $body = $doc->createElement('body');
@@ -125,6 +147,7 @@ final class XliffSerializer implements SerializerInterface
         foreach ($entries as $entry) {
             $unit = $doc->createElement('trans-unit');
             $unit->setAttribute('id', $entry->id());
+            $unit->setAttribute('resname', $entry->id());
             $body->appendChild($unit);
 
             $source = $entry->metadata()['source'] ?? $entry->id();
@@ -141,7 +164,7 @@ final class XliffSerializer implements SerializerInterface
     /**
      * @param list<TranslationEntryInterface> $entries
      */
-    private function buildXliff20(DOMDocument $doc, TranslationBagInterface $bag, array $entries): void
+    private function buildXliff20(DOMDocument $doc, TranslationBagInterface $bag, array $entries, string $name): void
     {
         $root = $doc->createElement('xliff');
         $root->setAttribute('version', XliffParser::VERSION_2_0);
@@ -151,12 +174,16 @@ final class XliffSerializer implements SerializerInterface
         $doc->appendChild($root);
 
         $file = $doc->createElement('file');
-        $file->setAttribute('id', 'messages');
+        $file->setAttribute('id', preg_match(self::NMTOKEN, $name) === 1 ? $name : self::DEFAULT_FILE);
         $root->appendChild($file);
 
         foreach ($entries as $entry) {
             $unit = $doc->createElement('unit');
-            $unit->setAttribute('id', $entry->id());
+            $unit->setAttribute(
+                'id',
+                preg_match(self::NMTOKEN, $entry->id()) === 1 ? $entry->id() : 'u' . hash('xxh128', $entry->id()),
+            );
+            $unit->setAttribute('name', $entry->id());
             $file->appendChild($unit);
 
             $notes = $this->extractNotes($entry);
@@ -175,6 +202,38 @@ final class XliffSerializer implements SerializerInterface
             $sourceText = is_string($source) ? $source : $entry->id();
             $segment->appendChild($this->createTextChild($doc, 'source', $sourceText));
             $segment->appendChild($this->createTextChild($doc, 'target', $entry->content()));
+        }
+    }
+
+    /**
+     * @param list<TranslationEntryInterface> $entries
+     *
+     * @throws SerializerException
+     */
+    private function assertWritable(array $entries): void
+    {
+        $seen = [];
+        foreach ($entries as $entry) {
+            $id = $entry->id();
+            if (isset($seen[$id])) {
+                throw new SerializerException(sprintf(
+                    'XLIFF cannot hold two entries with the id "%s" (different contexts or domains): '
+                    . 'serialize one domain at a time.',
+                    $id,
+                ));
+            }
+            $seen[$id] = true;
+
+            $source = $entry->metadata()['source'] ?? '';
+            $texts = [$id, $entry->content(), is_string($source) ? $source : '', ...$this->extractNotes($entry)];
+            foreach ($texts as $text) {
+                if (preg_match(self::FORBIDDEN_CHARACTERS, $text) === 1) {
+                    throw new SerializerException(sprintf(
+                        'XLIFF (XML 1.0) cannot hold the control characters of entry "%s".',
+                        $id,
+                    ));
+                }
+            }
         }
     }
 
