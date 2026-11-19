@@ -35,6 +35,10 @@ use Throwable;
  * (an id with spaces or punctuation gets an `id` derived from its
  * hash). The file is named after `$domain` (`messages` when null).
  *
+ * The source language (`source-language`, `srcLang`) is the one given
+ * to the constructor, else the one the parser kept from the original
+ * file (`metadata['xliff-source-language']`), else `en`.
+ *
  * Limitations match the parser: no plural-unit groups, no inline
  * placeholder fidelity, no context (`msgctxt`-equivalent). Two
  * entries sharing an id (different contexts or domains) cannot both
@@ -43,15 +47,12 @@ use Throwable;
  */
 final class XliffSerializer implements SerializerInterface
 {
-    /**
-     * @var non-empty-string Pseudo-language code used in the
-     *      `target-language` attribute of XLIFF 1.2 output when
-     *      the bag locale would be invalid as an XML attribute.
-     *      Translations from a bag carry their locale, but XLIFF
-     *      attributes use a separate naming convention; we simply
-     *      pass the locale through.
-     */
     private const string XML_VERSION = '1.0';
+
+    /**
+     * @var non-empty-string Source language written when none is known.
+     */
+    private const string DEFAULT_SOURCE_LANGUAGE = 'en';
 
     private const string XML_ENCODING = 'UTF-8';
 
@@ -66,6 +67,15 @@ final class XliffSerializer implements SerializerInterface
      * @var non-empty-string An XML NMTOKEN (simplified to letters, digits, `.`, `-`, `_`, `:`).
      */
     private const string NMTOKEN = '/^[\p{L}\p{N}._:\-]+$/uD';
+
+    /**
+     * @param non-empty-string|null $sourceLocale Source language of the file;
+     *        null keeps the one read from the original XLIFF file, or `en`.
+     */
+    public function __construct(
+        private readonly ?string $sourceLocale = null,
+    ) {
+    }
 
     public function serialize(
         TranslationBagInterface $bag,
@@ -135,7 +145,7 @@ final class XliffSerializer implements SerializerInterface
         $doc->appendChild($root);
 
         $file = $doc->createElement('file');
-        $file->setAttribute('source-language', 'en');
+        $file->setAttribute('source-language', $this->resolveSourceLanguage($entries));
         $file->setAttribute('target-language', $bag->locale());
         $file->setAttribute('datatype', 'plaintext');
         $file->setAttribute('original', $name);
@@ -169,7 +179,7 @@ final class XliffSerializer implements SerializerInterface
         $root = $doc->createElement('xliff');
         $root->setAttribute('version', XliffParser::VERSION_2_0);
         $root->setAttribute('xmlns', 'urn:oasis:names:tc:xliff:document:2.0');
-        $root->setAttribute('srcLang', 'en');
+        $root->setAttribute('srcLang', $this->resolveSourceLanguage($entries));
         $root->setAttribute('trgLang', $bag->locale());
         $doc->appendChild($root);
 
@@ -203,6 +213,25 @@ final class XliffSerializer implements SerializerInterface
             $segment->appendChild($this->createTextChild($doc, 'source', $sourceText));
             $segment->appendChild($this->createTextChild($doc, 'target', $entry->content()));
         }
+    }
+
+    /**
+     * @param list<TranslationEntryInterface> $entries
+     */
+    private function resolveSourceLanguage(array $entries): string
+    {
+        if ($this->sourceLocale !== null) {
+            return $this->sourceLocale;
+        }
+
+        foreach ($entries as $entry) {
+            $language = $entry->metadata()[XliffParser::SOURCE_LANGUAGE_METADATA] ?? null;
+            if (is_string($language) && $language !== '') {
+                return $language;
+            }
+        }
+
+        return self::DEFAULT_SOURCE_LANGUAGE;
     }
 
     /**

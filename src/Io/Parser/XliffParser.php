@@ -56,11 +56,18 @@ use G\Translator\Io\Source\SourceInterface;
  *     interpreted; the parser collects unit-level data only.
  *
  * The XLIFF version actually seen during parsing is preserved on
- * every entry under `metadata['xliff-version']` so the
- * matching serializer can emit the same version on round-trip.
+ * every entry under `metadata['xliff-version']`, and the source
+ * language (`source-language` of the 1.2 `<file>`, `srcLang` of the
+ * 2.0 root) under `metadata['xliff-source-language']`, so the
+ * matching serializer can emit the same values on round-trip.
  */
 final class XliffParser implements ParserInterface
 {
+    /**
+     * @var non-empty-string Metadata key holding the source language of the file.
+     */
+    public const string SOURCE_LANGUAGE_METADATA = 'xliff-source-language';
+
     /**
      * @var non-empty-string Canonical version string for XLIFF 1.2.
      */
@@ -157,9 +164,10 @@ final class XliffParser implements ParserInterface
         string $sourceIdentifier,
     ): void {
         foreach ($this->childElements($root, 'file') as $file) {
+            $sourceLanguage = $file->getAttribute('source-language');
             foreach ($this->childElements($file, 'body') as $body) {
                 foreach ($this->childElements($body, 'trans-unit') as $unit) {
-                    $entry = $this->buildEntryFromUnit12($unit, $domain, $sourceIdentifier);
+                    $entry = $this->buildEntryFromUnit12($unit, $domain, $sourceIdentifier, $sourceLanguage);
                     if ($entry !== null) {
                         $bag->add($entry);
                     }
@@ -178,9 +186,10 @@ final class XliffParser implements ParserInterface
         string $domain,
         string $sourceIdentifier,
     ): void {
+        $sourceLanguage = $root->getAttribute('srcLang');
         foreach ($this->childElements($root, 'file') as $file) {
             foreach ($this->childElements($file, 'unit') as $unit) {
-                $bag->add($this->buildEntryFromUnit20($unit, $domain, $sourceIdentifier));
+                $bag->add($this->buildEntryFromUnit20($unit, $domain, $sourceIdentifier, $sourceLanguage));
             }
         }
     }
@@ -193,6 +202,7 @@ final class XliffParser implements ParserInterface
         DOMElement $unit,
         string $domain,
         string $sourceIdentifier,
+        string $sourceLanguage,
     ): ?TranslationEntry {
         $id = $this->preferAttribute($unit, ['resname', 'id']);
         if ($id === null) {
@@ -206,6 +216,9 @@ final class XliffParser implements ParserInterface
         $metadata = [
             'xliff-version' => self::VERSION_1_2,
         ];
+        if ($sourceLanguage !== '') {
+            $metadata[self::SOURCE_LANGUAGE_METADATA] = $sourceLanguage;
+        }
         if ($notes !== []) {
             $metadata['notes'] = $notes;
         }
@@ -236,6 +249,7 @@ final class XliffParser implements ParserInterface
         DOMElement $unit,
         string $domain,
         string $sourceIdentifier,
+        string $sourceLanguage,
     ): TranslationEntry {
         $id = $this->preferAttribute($unit, ['name', 'id']) ?? '';
         if ($id === '') {
@@ -263,6 +277,9 @@ final class XliffParser implements ParserInterface
         $metadata = [
             'xliff-version' => self::VERSION_2_0,
         ];
+        if ($sourceLanguage !== '') {
+            $metadata[self::SOURCE_LANGUAGE_METADATA] = $sourceLanguage;
+        }
         if ($notes !== []) {
             $metadata['notes'] = $notes;
         }

@@ -21,11 +21,12 @@ use JsonException;
  * `AiProviderInterface` implementation backed by the DeepL REST API.
  *
  * DeepL is a text-only translation API: it produces a single target
- * string per request. **Plural support is NOT possible** — the
- * `sourcePluralText` field is ignored and
- * `TranslationResult::$translatedPluralForms` is always empty. The
- * caller is responsible for issuing additional requests for each
- * plural form they need to produce.
+ * string per request. **Plural support is NOT possible**: DeepL has
+ * no notion of the plural forms of a language, so a request carrying
+ * a `sourcePluralText` is refused with an `AiProviderException`
+ * (before anything is sent) rather than silently losing its forms.
+ * Translate plural entries with a provider that supports them
+ * (Claude, OpenAI).
  *
  * Endpoint selection:
  *
@@ -37,11 +38,12 @@ use JsonException;
  *
  * ## Locale handling
  *
- * DeepL uses uppercase ISO 639-1 codes plus optional region (e.g.,
- * `EN-GB`, `PT-BR`). The provider converts BCP-47 → DeepL format
- * by upper-casing the input. Locales not understood by DeepL
- * produce an `AiProviderException` carrying the upstream error
- * message verbatim.
+ * DeepL uses uppercase ISO 639-1 codes plus a few regional or script
+ * variants (`EN-GB`, `PT-BR`, `ZH-HANS`…). The source language is
+ * sent as a bare language; the target keeps a variant DeepL knows and
+ * is reduced to its language otherwise (`fr-FR` → `FR`). Locales not
+ * understood by DeepL produce an `AiProviderException` carrying the
+ * upstream error message verbatim.
  *
  * ## Batch failure policy
  *
@@ -160,8 +162,18 @@ final class DeeplProvider implements AiProviderInterface
         return $results;
     }
 
+    /**
+     * @throws AiProviderException When the request carries a plural source.
+     */
     private function buildHttpRequest(TranslationRequest $request): HttpRequest
     {
+        if ($request->sourcePluralText !== null) {
+            throw new AiProviderException(sprintf(
+                'DeepL cannot translate plural forms (source "%s"); use a provider that supports them.',
+                $request->sourceText,
+            ));
+        }
+
         $payload = [
             'text'        => [$request->sourceText],
             'target_lang' => $this->toDeeplTarget($request->targetLocale),

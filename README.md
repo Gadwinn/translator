@@ -99,7 +99,8 @@ The form is chosen with the plural rules of the locale the translation was found
 English fallback entry follows the English rules). For an entry read from a PO file, the
 `Plural-Forms` header of that file decides: its forms are numbered by its own expression, so
 every language is handled correctly (Slovenian, Latvian...) without registering anything.
-Other entries use the CLDR rules, or an expression registered with
+Other entries use the CLDR rules (every language of the CLDR plural data, 227 codes, checked
+against `plurals.xml` by the test suite), or an expression registered with
 `GettextExpressionPluralResolver::register()`.
 
 ### 3. Context (`msgctxt`) and domains
