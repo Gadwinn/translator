@@ -75,7 +75,7 @@ final class OpenAiProviderTest extends TestCase
         self::assertSame('Bearer sk-secret', $sent->headers['authorization']);
         self::assertNotNull($sent->body);
         self::assertStringContainsString('"response_format":{"type":"json_object"}', $sent->body);
-        self::assertStringContainsString('"model":"gpt-4o"', $sent->body); // STANDARD default
+        self::assertStringContainsString('"model":"gpt-6.1-terra"', $sent->body); // STANDARD default
     }
 
     public function testFastQualitySelectsMiniModel(): void
@@ -91,7 +91,7 @@ final class OpenAiProviderTest extends TestCase
             quality: TranslationQuality::FAST,
         ));
 
-        self::assertStringContainsString('"model":"gpt-4o-mini"', $http->sent[0]->body ?? '');
+        self::assertStringContainsString('"model":"gpt-6-luna"', $http->sent[0]->body ?? '');
     }
 
     public function testAuthErrorMapsTo401(): void
@@ -310,6 +310,61 @@ final class OpenAiProviderTest extends TestCase
         ]);
 
         self::assertSame([42, 'k'], array_keys($results));
+    }
+
+    public function testTruncatedAnswerRaisesProviderException(): void
+    {
+        $http = new StubHttpClient();
+        $http->enqueueResponse(self::successResponse((string) json_encode([
+            'choices' => [[
+                'finish_reason' => 'length',
+                'message' => ['role' => 'assistant', 'content' => '{"translatedText": "Bon'],
+            ]],
+        ])));
+
+        $this->expectException(AiProviderException::class);
+        $this->expectExceptionMessage('ran out of tokens');
+        (new OpenAiProvider($http, 'k'))->translate(self::sampleRequest());
+    }
+
+    public function testDefaultModelsByQuality(): void
+    {
+        $cases = [
+            [TranslationQuality::FAST,     'gpt-6-luna'],
+            [TranslationQuality::STANDARD, 'gpt-6.1-terra'],
+            [TranslationQuality::HIGH,     'gpt-6.2-sol'],
+        ];
+
+        foreach ($cases as [$quality, $model]) {
+            $http = new StubHttpClient();
+            $http->enqueueResponse(self::successResponse(self::openAiBody(['translatedText' => 'x'])));
+
+            (new OpenAiProvider($http, 'k'))->translate(new TranslationRequest(
+                sourceText: 'Hi',
+                sourceLocale: 'en',
+                targetLocale: 'fr',
+                quality: $quality,
+            ));
+
+            $payload = json_decode($http->sent[0]->body ?? '', true, flags: JSON_THROW_ON_ERROR);
+            self::assertSame($model, $payload['model'], $quality->value);
+        }
+    }
+
+    public function testModelsCanBeReplaced(): void
+    {
+        $http = new StubHttpClient();
+        $http->enqueueResponse(self::successResponse(self::openAiBody(['translatedText' => 'x'])));
+
+        (new OpenAiProvider($http, 'k', highModel: 'gpt-6.2-astra'))->translate(new TranslationRequest(
+            sourceText: 'Hi',
+            sourceLocale: 'en',
+            targetLocale: 'fr',
+            quality: TranslationQuality::HIGH,
+        ));
+
+        $payload = json_decode($http->sent[0]->body ?? '', true, flags: JSON_THROW_ON_ERROR);
+        self::assertSame('gpt-6.2-astra', $payload['model']);
     }
 
     private static function sampleRequest(): TranslationRequest

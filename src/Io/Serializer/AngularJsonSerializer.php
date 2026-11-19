@@ -22,6 +22,9 @@ use JsonException;
  * `app.title` both present), a `SerializerException` is thrown —
  * a value cannot be both a leaf and a container at the same path.
  *
+ * An id with an empty segment (`a..b`, `.a`, `a.`) cannot be
+ * expressed as nested keys and throws a `SerializerException` too.
+ *
  * Limitations match `JsonSerializer`: no plurals, no context, no
  * metadata.
  */
@@ -30,6 +33,7 @@ final class AngularJsonSerializer implements SerializerInterface
     private const int ENCODE_FLAGS = JSON_PRETTY_PRINT
         | JSON_UNESCAPED_UNICODE
         | JSON_UNESCAPED_SLASHES
+        | JSON_FORCE_OBJECT
         | JSON_THROW_ON_ERROR;
 
     private const string KEY_SEPARATOR = '.';
@@ -72,6 +76,12 @@ final class AngularJsonSerializer implements SerializerInterface
     private function insertNested(array &$tree, string $id, string $value): void
     {
         $segments = explode(self::KEY_SEPARATOR, $id);
+        if (in_array('', $segments, true)) {
+            throw new SerializerException(sprintf(
+                'Angular JSON serializer cannot nest id "%s": it has an empty segment.',
+                $id,
+            ));
+        }
         $cursor = &$tree;
         $depth = count($segments);
 

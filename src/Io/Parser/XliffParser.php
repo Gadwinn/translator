@@ -30,15 +30,18 @@ use G\Translator\Io\Source\SourceInterface;
  *     informational only (the bag's locale comes from the
  *     `parse()` argument).
  *   - `<body>` containing `<trans-unit>` elements.
- *   - `<trans-unit id="...">` with `<source>` and `<target>`
- *     children.
+ *   - `<trans-unit resname="..." id="...">` with `<source>` and
+ *     `<target>` children. The entry id is `resname` (the resource
+ *     name, as written by Symfony and most tools, whose `id` is often
+ *     a hash or a number), else `id`.
  *   - `<note>` children captured as `metadata['notes']`.
  *
  * Supported XLIFF 2.0 nodes:
  *
  *   - `<xliff>` (root) — must declare `version="2.0"`.
  *   - `<file id="...">`.
- *   - `<unit id="...">` containing `<segment>` blocks.
+ *   - `<unit name="..." id="...">` containing `<segment>` blocks.
+ *     The entry id is `name` (the resource name), else `id`.
  *   - `<segment>` with `<source>` and `<target>` children.
  *   - `<notes>/<note>` captured as `metadata['notes']`.
  *
@@ -191,7 +194,7 @@ final class XliffParser implements ParserInterface
         string $domain,
         string $sourceIdentifier,
     ): ?TranslationEntry {
-        $id = $this->preferAttribute($unit, ['id', 'resname']);
+        $id = $this->preferAttribute($unit, ['resname', 'id']);
         if ($id === null) {
             return null;
         }
@@ -234,7 +237,7 @@ final class XliffParser implements ParserInterface
         string $domain,
         string $sourceIdentifier,
     ): TranslationEntry {
-        $id = $unit->getAttribute('id');
+        $id = $this->preferAttribute($unit, ['name', 'id']) ?? '';
         if ($id === '') {
             throw new ParserException(sprintf(
                 'XLIFF source "%s": <unit> missing id attribute.',

@@ -9,6 +9,8 @@ use G\Translator\Bag\TranslationEntry;
 use G\Translator\Enum\Format;
 use G\Translator\Enum\PluralCategory;
 use G\Translator\Io\Serializer\PoSerializer;
+use G\Translator\Io\Parser\PoParser;
+use G\Translator\Io\Source\StringSource;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 
@@ -274,5 +276,21 @@ final class PoSerializerTest extends TestCase
         self::assertStringContainsString('msgstr[0] "Jeden element"', $output);
         self::assertStringContainsString('msgstr[1] "%d elementy"', $output);
         self::assertStringContainsString('msgstr[2] "%d elementów"', $output);
+    }
+
+    public function testMultilineCommentsArePrefixedOnEveryLine(): void
+    {
+        $bag = new TranslationBag('fr');
+        $bag->add(new TranslationEntry(
+            id: 'hello',
+            content: 'Bonjour',
+            metadata: ['comments' => ["first line\nsecond line"], 'extracted' => ["a\r\nb"]],
+        ));
+
+        $out = (new PoSerializer())->serialize($bag);
+        self::assertStringContainsString("# first line\n# second line\n#. a\n#. b\nmsgid", $out);
+
+        $reparsed = (new PoParser())->parse(new StringSource($out), 'fr');
+        self::assertSame('Bonjour', $reparsed->get('hello')->content());
     }
 }

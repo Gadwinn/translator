@@ -7,6 +7,7 @@ namespace G\Translator\Tests\Io\Roundtrip;
 use G\Translator\Bag\TranslationBag;
 use G\Translator\Bag\TranslationEntry;
 use G\Translator\Exception\Io\ParserException;
+use G\Translator\Exception\Io\SerializerException;
 use G\Translator\Io\Parser\XliffParser;
 use G\Translator\Io\Serializer\XliffSerializer;
 use G\Translator\Io\Source\StringSource;
@@ -150,7 +151,7 @@ final class XliffRoundtripTest extends TestCase
 
         $out = (new XliffSerializer())->serialize($bag);
         self::assertStringContainsString('version="1.2"', $out);
-        self::assertStringContainsString('<trans-unit id="hello">', $out);
+        self::assertStringContainsString('<trans-unit id="hello" resname="hello">', $out);
         self::assertStringContainsString('<source>hello</source>', $out);
         self::assertStringContainsString('<target>Hello</target>', $out);
     }
@@ -236,4 +237,88 @@ final class XliffRoundtripTest extends TestCase
         self::assertSame('Bonjour', $bag->get('hello')->content());
     }
 
+    public function testResnameIsTheKeyInXliff12(): void
+    {
+        // Symfony writes a hash as id and the message key as resname
+        $xml = <<<'XML'
+            <?xml version="1.0" encoding="UTF-8"?>
+            <xliff version="1.2" xmlns="urn:oasis:names:tc:xliff:document:1.2">
+              <file source-language="en" target-language="fr" datatype="plaintext" original="messages">
+                <body>
+                  <trans-unit id="a1b2c3" resname="app.title">
+                    <source>app.title</source>
+                    <target>Titre</target>
+                  </trans-unit>
+                </body>
+              </file>
+            </xliff>
+            XML;
+
+        $bag = (new XliffParser())->parse(new StringSource($xml), 'fr');
+        self::assertSame('Titre', $bag->get('app.title')->content());
+    }
+
+    public function testNameIsTheKeyInXliff20(): void
+    {
+        $xml = <<<'XML'
+            <?xml version="1.0" encoding="UTF-8"?>
+            <xliff version="2.0" xmlns="urn:oasis:names:tc:xliff:document:2.0" srcLang="en" trgLang="fr">
+              <file id="messages">
+                <unit id="u1" name="Hello world">
+                  <segment>
+                    <source>Hello world</source>
+                    <target>Bonjour le monde</target>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            XML;
+
+        $bag = (new XliffParser())->parse(new StringSource($xml), 'fr');
+        self::assertSame('Bonjour le monde', $bag->get('Hello world')->content());
+    }
+
+    public function testXliff20UnitIdIsAValidNmtoken(): void
+    {
+        $bag = new TranslationBag('fr');
+        $bag->add(new TranslationEntry(
+            id: 'Hello world',
+            content: 'Bonjour le monde',
+            metadata: ['xliff-version' => XliffParser::VERSION_2_0],
+        ));
+
+        $out = (new XliffSerializer())->serialize($bag);
+        self::assertMatchesRegularExpression('/<unit id="u[0-9a-f]{32}" name="Hello world">/', $out);
+
+        $reparsed = (new XliffParser())->parse(new StringSource($out), 'fr');
+        self::assertSame('Bonjour le monde', $reparsed->get('Hello world')->content());
+    }
+
+    public function testFileIsNamedAfterTheDomain(): void
+    {
+        $bag = new TranslationBag('fr');
+        $bag->add(new TranslationEntry(id: 'hello', content: 'Bonjour', domain: 'validators'));
+
+        $out = (new XliffSerializer())->serialize($bag, 'validators');
+        self::assertStringContainsString('original="validators"', $out);
+    }
+
+    public function testDuplicateIdsAreRejected(): void
+    {
+        $bag = new TranslationBag('fr');
+        $bag->add(new TranslationEntry(id: 'open', content: 'Ouvrir', context: 'verb'));
+        $bag->add(new TranslationEntry(id: 'open', content: 'Ouvert', context: 'adjective'));
+
+        $this->expectException(SerializerException::class);
+        (new XliffSerializer())->serialize($bag);
+    }
+
+    public function testForbiddenControlCharactersAreRejected(): void
+    {
+        $bag = new TranslationBag('fr');
+        $bag->add(new TranslationEntry(id: 'k', content: "bell\x07"));
+
+        $this->expectException(SerializerException::class);
+        (new XliffSerializer())->serialize($bag);
+    }
 }

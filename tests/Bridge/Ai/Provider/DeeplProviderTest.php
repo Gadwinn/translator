@@ -117,7 +117,36 @@ final class DeeplProviderTest extends TestCase
 
         $body = $http->sent[0]->body ?? '';
         self::assertStringContainsString('"target_lang":"PT-BR"', $body);
-        self::assertStringContainsString('"source_lang":"EN-US"', $body);
+        self::assertStringContainsString('"source_lang":"EN"', $body);
+    }
+
+    public function testTargetWithoutDeeplVariantFallsBackToLanguage(): void
+    {
+        $http = new StubHttpClient();
+        $http->enqueueResponse(self::successResponse('{"translations":[{"text":"X"}]}'));
+        $http->enqueueResponse(self::successResponse('{"translations":[{"text":"X"}]}'));
+        $provider = new DeeplProvider($http, 'k');
+
+        $provider->translate(new TranslationRequest(sourceText: 'Hi', sourceLocale: 'en-GB', targetLocale: 'fr-FR'));
+        $provider->translate(new TranslationRequest(sourceText: 'Hi', sourceLocale: 'en', targetLocale: 'zh-TW'));
+
+        self::assertStringContainsString('"target_lang":"FR"', $http->sent[0]->body ?? '');
+        self::assertStringContainsString('"target_lang":"ZH-HANT"', $http->sent[1]->body ?? '');
+    }
+
+    public function testContextIsSent(): void
+    {
+        $http = new StubHttpClient();
+        $http->enqueueResponse(self::successResponse('{"translations":[{"text":"Ouvrir"}]}'));
+
+        (new DeeplProvider($http, 'k'))->translate(new TranslationRequest(
+            sourceText: 'Open',
+            sourceLocale: 'en',
+            targetLocale: 'fr',
+            context: 'A button that opens a file',
+        ));
+
+        self::assertStringContainsString('"context":"A button that opens a file"', $http->sent[0]->body ?? '');
     }
 
     public function testAuthErrorMapping(): void

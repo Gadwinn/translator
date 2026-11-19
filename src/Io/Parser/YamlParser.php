@@ -18,11 +18,17 @@ use G\Translator\Io\Source\SourceInterface;
  * ## Supported subset
  *
  *   - Nested maps via indentation.
+ *   - Keys — plain (`app.title`, no whitespace, `:` or `#`), or
+ *     single- / double-quoted like values (`"Hello world": Bonjour`).
  *   - Scalar strings — unquoted (taken literally), single-quoted
  *     (no escapes; `''` represents a literal single quote), or
- *     double-quoted (with `\n` `\t` `\r` `\\` `\"` escapes).
- *   - Comments (`#`) on their own line or trailing after a value.
- *   - The optional `---` document-start marker on the first line.
+ *     double-quoted with the YAML escapes `\\` `\"` `\/` `\0` `\a`
+ *     `\b` `\t` `\n` `\v` `\f` `\r` `\e` `\ ` `\xHH` `\uHHHH`
+ *     `\UHHHHHHHH`.
+ *   - Comments (`#`) on their own line or trailing after a value
+ *     (a `#` inside a quoted string is part of the string).
+ *   - The optional `---` document-start marker on the first
+ *     non-blank, non-comment line.
  *
  * ## Deliberately rejected
  *
@@ -32,11 +38,13 @@ use G\Translator\Io\Source\SourceInterface;
  *   - Flow style (`{key: value}`, `[a, b]`).
  *   - List items (`-`). The translation model is map-of-strings;
  *     list values have no canonical mapping.
+ *   - Duplicate keys in the same map (forbidden by YAML).
  *   - Numeric / boolean scalar coercion. Every value is parsed as
  *     a string; YAML's implicit typing (`yes`, `true`, `42`, `null`,
  *     …) is intentionally NOT applied here.
  *
- * Any input outside this subset triggers `ParserException`.
+ * Any input outside this subset (including an unterminated quoted
+ * string or an unknown escape) triggers `ParserException`.
  *
  * Indentation MUST use spaces (tabs are rejected to keep the
  * grammar unambiguous). The width of the indent for each new
@@ -55,21 +63,60 @@ final class YamlParser implements ParserInterface
 
     /**
      * @var non-empty-string Document-start marker that may appear
-     *      on the first non-blank line; it is skipped.
+     *      on the first content line; it is skipped.
      */
     private const string DOCUMENT_START = '---';
-
-    /**
-     * @var int Minimum length of a quoted string — an opening quote
-     *      plus a closing quote (`""` and `''` both qualify).
-     */
-    private const int MIN_QUOTED_STRING_LENGTH = 2;
 
     /**
      * @var int Sentinel returned by `peekIndent()` when the cursor
      *      has already moved past the last line of the document.
      */
     private const int INDENT_END_OF_INPUT = -1;
+
+    /**
+     * @var array<array-key, string> Single-character escapes of
+     *      double-quoted scalars (YAML 1.2 §5.7).
+     */
+    private const array SIMPLE_ESCAPES = [
+        '\\' => '\\',
+        '"'  => '"',
+        '/'  => '/',
+        ' '  => ' ',
+        '0'  => "\0",
+        'a'  => "\x07",
+        'b'  => "\x08",
+        't'  => "\t",
+        'n'  => "\n",
+        'v'  => "\x0B",
+        'f'  => "\x0C",
+        'r'  => "\r",
+        'e'  => "\x1B",
+    ];
+
+    /**
+     * @var array<string, int> Hexadecimal escapes and their digit count.
+     */
+    private const array HEX_ESCAPES = ['x' => 2, 'u' => 4, 'U' => 8];
+
+    /**
+     * @var int Highest Unicode code point.
+     */
+    private const int MAX_CODE_POINT = 0x10FFFF;
+
+    /**
+     * @var int First UTF-16 surrogate (not a character on its own).
+     */
+    private const int SURROGATE_FIRST = 0xD800;
+
+    /**
+     * @var int Last UTF-16 surrogate.
+     */
+    private const int SURROGATE_LAST = 0xDFFF;
+
+    /**
+     * @var int Length of the UTF-8 byte order mark.
+     */
+    private const int BOM_LENGTH = 3;
 
     public function parse(
         SourceInterface $source,
@@ -105,23 +152,20 @@ final class YamlParser implements ParserInterface
     private function normalizeLines(string $content): array
     {
         if (str_starts_with($content, "\xEF\xBB\xBF")) {
-            $content = substr($content, 3);
+            $content = substr($content, self::BOM_LENGTH);
         }
 
         $content = str_replace(["\r\n", "\r"], "\n", $content);
         $rawLines = explode("\n", $content);
 
         $result = [];
-        foreach ($rawLines as $index => $line) {
+        foreach ($rawLines as $line) {
             $stripped = rtrim($line);
             $trimmed = ltrim($stripped);
-            if ($trimmed === '') {
+            if ($trimmed === '' || str_starts_with($trimmed, '#')) {
                 continue;
             }
-            if (str_starts_with($trimmed, '#')) {
-                continue;
-            }
-            if ($index === 0 && $trimmed === self::DOCUMENT_START) {
+            if ($result === [] && $trimmed === self::DOCUMENT_START) {
                 continue;
             }
             $result[] = $stripped;
@@ -160,6 +204,14 @@ final class YamlParser implements ParserInterface
 
             [$key, $valuePart] = $this->extractKeyAndValue($line, $sourceIdentifier);
             $cursor++;
+
+            if (array_key_exists($key, $result)) {
+                throw new ParserException(sprintf(
+                    'YAML source "%s": duplicate key "%s".',
+                    $sourceIdentifier,
+                    $key,
+                ));
+            }
 
             if ($valuePart === '') {
                 $nextIndent = $this->peekIndent($lines, $cursor, $sourceIdentifier);
@@ -219,13 +271,15 @@ final class YamlParser implements ParserInterface
     /**
      * @param non-empty-string $sourceIdentifier
      *
-     * @return array{0: non-empty-string, 1: string}
+     * @return array{0: non-empty-string, 1: string} The key and the
+     *         value part, trailing comment removed (empty for a
+     *         nested map or an empty value).
      */
     private function extractKeyAndValue(string $line, string $sourceIdentifier): array
     {
         $trimmed = ltrim($line);
 
-        // Reject flow style, list items, and multi-line scalar markers up front.
+        // Reject flow style and list items up front.
         if (str_starts_with($trimmed, '-')) {
             throw new ParserException(sprintf(
                 'YAML source "%s": list items ("-") are not supported (line "%s").',
@@ -241,8 +295,19 @@ final class YamlParser implements ParserInterface
             ));
         }
 
+        if (str_starts_with($trimmed, "'") || str_starts_with($trimmed, '"')) {
+            [$key, $end] = $this->readQuoted($trimmed, $sourceIdentifier);
+            $rest = substr($trimmed, $end);
+        } elseif (preg_match('/^([^\s:#]+)(.*)$/', $trimmed, $match) === 1) {
+            $key = $match[1];
+            $rest = $match[2];
+        } else {
+            $key = '';
+            $rest = '';
+        }
+
         // `key: rest` (rest may be empty for nested maps).
-        if (preg_match('/^([^\s:#]+)\s*:(?:\s+(.*))?$/', $trimmed, $match) !== 1) {
+        if ($key === '' || preg_match('/^\s*:(?:\s+(.*))?$/', $rest, $match) !== 1) {
             throw new ParserException(sprintf(
                 'YAML source "%s": expected "key: value", got "%s".',
                 $sourceIdentifier,
@@ -250,21 +315,15 @@ final class YamlParser implements ParserInterface
             ));
         }
 
-        // The regex `[^\s:#]+` already guarantees a non-empty key.
-        $key = $match[1];
-        $value = $match[2] ?? '';
-
-        return [$key, $value];
+        return [$key, $this->stripTrailingComment($match[1] ?? '', $sourceIdentifier)];
     }
 
     /**
      * @param non-empty-string $sourceIdentifier
      */
-    private function parseScalar(string $raw, string $sourceIdentifier): string
+    private function parseScalar(string $value, string $sourceIdentifier): string
     {
-        $value = $this->stripTrailingComment($raw);
-
-        if ($value === '|' || str_starts_with($value, '|') || str_starts_with($value, '>')) {
+        if (str_starts_with($value, '|') || str_starts_with($value, '>')) {
             throw new ParserException(sprintf(
                 'YAML source "%s": multi-line scalars ("|", ">") are not supported.',
                 $sourceIdentifier,
@@ -276,29 +335,12 @@ final class YamlParser implements ParserInterface
                 $sourceIdentifier,
             ));
         }
-        if (str_starts_with($value, '!!') || str_starts_with($value, '!')) {
+        if (str_starts_with($value, '!')) {
             throw new ParserException(sprintf(
                 'YAML source "%s": tags ("!", "!!") are not supported.',
                 $sourceIdentifier,
             ));
         }
-
-        if (
-            str_starts_with($value, "'")
-            && str_ends_with($value, "'")
-            && strlen($value) >= self::MIN_QUOTED_STRING_LENGTH
-        ) {
-            return str_replace("''", "'", substr($value, 1, -1));
-        }
-
-        if (
-            str_starts_with($value, '"')
-            && str_ends_with($value, '"')
-            && strlen($value) >= self::MIN_QUOTED_STRING_LENGTH
-        ) {
-            return $this->unescapeDoubleQuoted(substr($value, 1, -1));
-        }
-
         if (str_starts_with($value, '{') || str_starts_with($value, '[')) {
             throw new ParserException(sprintf(
                 'YAML source "%s": flow style ("{...}", "[...]") is not supported in value position.',
@@ -306,42 +348,136 @@ final class YamlParser implements ParserInterface
             ));
         }
 
+        if (str_starts_with($value, "'") || str_starts_with($value, '"')) {
+            // stripTrailingComment() already checked that nothing follows the closing quote.
+            return $this->readQuoted($value, $sourceIdentifier)[0];
+        }
+
         return $value;
     }
 
-    private function stripTrailingComment(string $value): string
+    /**
+     * Removes a trailing comment from a value: after a quoted string,
+     * only whitespace and a comment may follow; in a plain scalar, a
+     * `#` starts a comment when it begins the value or follows
+     * whitespace.
+     *
+     * @param non-empty-string $sourceIdentifier
+     */
+    private function stripTrailingComment(string $value, string $sourceIdentifier): string
     {
-        // A trailing `#` MUST be preceded by whitespace to be a comment.
-        if (preg_match('/^(.*?)\s+#.*$/', $value, $match) === 1) {
+        if (str_starts_with($value, '#')) {
+            return '';
+        }
+
+        if (str_starts_with($value, "'") || str_starts_with($value, '"')) {
+            $end = $this->readQuoted($value, $sourceIdentifier)[1];
+            $rest = substr($value, $end);
+            if (preg_match('/^(?:\s+#.*)?\s*$/', $rest) !== 1) {
+                throw new ParserException(sprintf(
+                    'YAML source "%s": unexpected characters after a quoted string in "%s".',
+                    $sourceIdentifier,
+                    $value,
+                ));
+            }
+
+            return substr($value, 0, $end);
+        }
+
+        if (preg_match('/^(.*?)\s+#/', $value, $match) === 1) {
             return rtrim($match[1]);
         }
 
         return $value;
     }
 
-    private function unescapeDoubleQuoted(string $raw): string
+    /**
+     * Reads the quoted string starting at the first character of `$text`.
+     *
+     * @param non-empty-string $sourceIdentifier
+     *
+     * @return array{0: string, 1: int} The unquoted value and the offset
+     *         just after the closing quote.
+     */
+    private function readQuoted(string $text, string $sourceIdentifier): array
     {
-        $result = '';
-        $length = strlen($raw);
-        for ($i = 0; $i < $length; $i++) {
-            $char = $raw[$i];
-            if ($char !== '\\' || $i + 1 >= $length) {
-                $result .= $char;
+        $quote = $text[0];
+        $length = strlen($text);
+        $value = '';
+
+        for ($i = 1; $i < $length; $i++) {
+            $char = $text[$i];
+
+            if ($quote === "'") {
+                if ($char !== "'") {
+                    $value .= $char;
+                    continue;
+                }
+                if ($i + 1 < $length && $text[$i + 1] === "'") {
+                    $value .= "'";
+                    $i++;
+                    continue;
+                }
+
+                return [$value, $i + 1];
+            }
+
+            if ($char === '"') {
+                return [$value, $i + 1];
+            }
+            if ($char !== '\\') {
+                $value .= $char;
                 continue;
             }
-            $next = $raw[$i + 1];
-            $result .= match ($next) {
-                '\\' => '\\',
-                '"'  => '"',
-                'n'  => "\n",
-                't'  => "\t",
-                'r'  => "\r",
-                default => '\\' . $next,
-            };
-            $i++;
+
+            [$decoded, $consumed] = $this->decodeEscape($text, $i + 1, $sourceIdentifier);
+            $value .= $decoded;
+            $i += $consumed;
         }
 
-        return $result;
+        throw new ParserException(sprintf(
+            'YAML source "%s": unterminated quoted string %s.',
+            $sourceIdentifier,
+            $text,
+        ));
+    }
+
+    /**
+     * Decodes the escape sequence whose letter is at `$offset`.
+     *
+     * @param non-empty-string $sourceIdentifier
+     *
+     * @return array{0: string, 1: int} The decoded text and the number
+     *         of characters consumed after the backslash.
+     */
+    private function decodeEscape(string $text, int $offset, string $sourceIdentifier): array
+    {
+        $letter = $text[$offset] ?? '';
+
+        if (isset(self::SIMPLE_ESCAPES[$letter])) {
+            return [self::SIMPLE_ESCAPES[$letter], 1];
+        }
+
+        if (isset(self::HEX_ESCAPES[$letter])) {
+            $digits = self::HEX_ESCAPES[$letter];
+            $hex = substr($text, $offset + 1, $digits);
+            if (strlen($hex) === $digits && ctype_xdigit($hex)) {
+                // All three are Unicode code points (`\xE9` is "é"), written in UTF-8
+                $codePoint = (int) hexdec($hex);
+                $isScalarValue = $codePoint <= self::MAX_CODE_POINT
+                    && ($codePoint < self::SURROGATE_FIRST || $codePoint > self::SURROGATE_LAST);
+                if ($isScalarValue) {
+                    return [mb_chr($codePoint, 'UTF-8'), $digits + 1];
+                }
+            }
+        }
+
+        throw new ParserException(sprintf(
+            'YAML source "%s": invalid escape sequence "\\%s" in %s.',
+            $sourceIdentifier,
+            $letter,
+            $text,
+        ));
     }
 
     /**
@@ -353,7 +489,7 @@ final class YamlParser implements ParserInterface
     private function flatten(array $data, string $prefix, string $sourceIdentifier): iterable
     {
         foreach ($data as $key => $value) {
-            $segment = $key;
+            $segment = (string) $key;
             $fullKey = $prefix === '' ? $segment : $prefix . self::KEY_SEPARATOR . $segment;
 
             if (is_string($value)) {
