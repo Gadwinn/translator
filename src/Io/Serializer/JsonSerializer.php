@@ -15,7 +15,8 @@ use JsonException;
  * Produces a FLAT dictionary keyed by entry id. Output is
  * pretty-printed with two-space indentation, Unicode characters
  * preserved verbatim (no `\uXXXX` escapes), and forward slashes
- * left as-is. The trailing newline is intentionally omitted so
+ * left as-is. The output is always an object, even when every id is
+ * numeric (`"0"`, `"1"`…), which PHP would otherwise encode as a list. The trailing newline is intentionally omitted so
  * the output can be piped directly without normalization.
  *
  * Limitations:
@@ -42,6 +43,7 @@ final class JsonSerializer implements SerializerInterface
     private const int ENCODE_FLAGS = JSON_PRETTY_PRINT
         | JSON_UNESCAPED_UNICODE
         | JSON_UNESCAPED_SLASHES
+        | JSON_FORCE_OBJECT
         | JSON_THROW_ON_ERROR;
 
     public function serialize(
